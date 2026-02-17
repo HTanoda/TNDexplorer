@@ -1,0 +1,344 @@
+using System.Collections.ObjectModel;
+using System.Linq;
+using TNDexplorer.Core;
+using TNDexplorer.Models;
+using TNDexplorer.Services;
+
+namespace TNDexplorer.ViewModels
+{
+    public class SettingsFavoriteItem : ViewModelBase
+    {
+        public string Name { get; set; }
+        public string Extension { get; set; }
+        public string FolderPath { get; set; }
+        public string Keyword { get; set; }
+    }
+
+    public class SettingsViewModel : ViewModelBase
+    {
+        private readonly SettingsService _settingsService;
+        private readonly NetworkDriveDetector _detector;
+        private AppSettings _settings;
+
+        private int _maxSearchResults;
+        private int _networkRescanIntervalMinutes;
+        private string _excludePatternsText;
+        private bool _excludeHiddenFiles;
+        private bool _excludeSystemFiles;
+
+        // New favorite fields
+        private string _newSettingsFavName = "";
+        private string _newSettingsFavExt = "";
+        private string _newSettingsFavFolder = "";
+        private string _newSettingsFavKeyword = "";
+
+        // Edit mode
+        private bool _isEditingFavorite;
+        private SettingsFavoriteItem _editingFavoriteItem;
+        private string _favRegisterButtonText = "登録";
+
+        public ObservableCollection<DriveSelectionItem> LocalDrives { get; }
+            = new ObservableCollection<DriveSelectionItem>();
+
+        public ObservableCollection<DriveSelectionItem> NetworkDrives { get; }
+            = new ObservableCollection<DriveSelectionItem>();
+
+        public ObservableCollection<SettingsFavoriteItem> SettingsFavorites { get; }
+            = new ObservableCollection<SettingsFavoriteItem>();
+
+        public int MaxSearchResults
+        {
+            get => _maxSearchResults;
+            set => SetProperty(ref _maxSearchResults, value);
+        }
+
+        public int NetworkRescanIntervalMinutes
+        {
+            get => _networkRescanIntervalMinutes;
+            set => SetProperty(ref _networkRescanIntervalMinutes, value);
+        }
+
+        public string ExcludePatternsText
+        {
+            get => _excludePatternsText;
+            set => SetProperty(ref _excludePatternsText, value);
+        }
+
+        public bool ExcludeHiddenFiles
+        {
+            get => _excludeHiddenFiles;
+            set => SetProperty(ref _excludeHiddenFiles, value);
+        }
+
+        public bool ExcludeSystemFiles
+        {
+            get => _excludeSystemFiles;
+            set => SetProperty(ref _excludeSystemFiles, value);
+        }
+
+        public string NewSettingsFavName
+        {
+            get => _newSettingsFavName;
+            set => SetProperty(ref _newSettingsFavName, value);
+        }
+
+        public string NewSettingsFavExt
+        {
+            get => _newSettingsFavExt;
+            set => SetProperty(ref _newSettingsFavExt, value);
+        }
+
+        public string NewSettingsFavFolder
+        {
+            get => _newSettingsFavFolder;
+            set => SetProperty(ref _newSettingsFavFolder, value);
+        }
+
+        public string NewSettingsFavKeyword
+        {
+            get => _newSettingsFavKeyword;
+            set => SetProperty(ref _newSettingsFavKeyword, value);
+        }
+
+        public bool IsEditingFavorite
+        {
+            get => _isEditingFavorite;
+            private set => SetProperty(ref _isEditingFavorite, value);
+        }
+
+        public string FavRegisterButtonText
+        {
+            get => _favRegisterButtonText;
+            private set => SetProperty(ref _favRegisterButtonText, value);
+        }
+
+        public bool HasNetworkDrives => NetworkDrives.Count > 0;
+
+        public RelayCommand RefreshDrivesCommand { get; }
+        public RelayCommand SaveCommand { get; }
+
+        public SettingsViewModel(SettingsService settingsService)
+        {
+            _settingsService = settingsService;
+            _detector = new NetworkDriveDetector();
+
+            RefreshDrivesCommand = new RelayCommand(RefreshDrives);
+            SaveCommand = new RelayCommand(Save);
+
+            LoadSettings();
+        }
+
+        private void LoadSettings()
+        {
+            _settings = _settingsService.Load();
+            MaxSearchResults = _settings.MaxSearchResults;
+            NetworkRescanIntervalMinutes = _settings.NetworkRescanIntervalMinutes;
+            ExcludeHiddenFiles = _settings.ExcludeHiddenFiles;
+            ExcludeSystemFiles = _settings.ExcludeSystemFiles;
+            ExcludePatternsText = string.Join("\n", _settings.ExcludePatterns ?? Enumerable.Empty<string>());
+
+            RefreshDrives();
+            LoadFavorites();
+        }
+
+        private void LoadFavorites()
+        {
+            SettingsFavorites.Clear();
+            if (_settings.FavoriteFilters != null)
+            {
+                foreach (var f in _settings.FavoriteFilters)
+                {
+                    SettingsFavorites.Add(new SettingsFavoriteItem
+                    {
+                        Name = f.Name,
+                        Extension = f.Extension,
+                        FolderPath = f.FolderPath,
+                        Keyword = f.Keyword,
+                    });
+                }
+            }
+        }
+
+        public void BeginEditFavorite(SettingsFavoriteItem item)
+        {
+            _editingFavoriteItem = item;
+            IsEditingFavorite = true;
+            FavRegisterButtonText = "上書き保存";
+
+            // Populate input fields with selected item's data
+            NewSettingsFavName = item.Name;
+            NewSettingsFavExt = item.Extension;
+            NewSettingsFavFolder = item.FolderPath;
+            NewSettingsFavKeyword = item.Keyword;
+        }
+
+        public void CancelEditFavorite()
+        {
+            _editingFavoriteItem = null;
+            IsEditingFavorite = false;
+            FavRegisterButtonText = "登録";
+
+            NewSettingsFavName = "";
+            NewSettingsFavExt = "";
+            NewSettingsFavFolder = "";
+            NewSettingsFavKeyword = "";
+        }
+
+        public void AddOrUpdateSettingsFavorite()
+        {
+            if (IsEditingFavorite && _editingFavoriteItem != null)
+            {
+                // Update existing item
+                string name = NewSettingsFavName;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = GenerateAutoName();
+                }
+
+                _editingFavoriteItem.Name = name;
+                _editingFavoriteItem.Extension = _newSettingsFavExt;
+                _editingFavoriteItem.FolderPath = _newSettingsFavFolder;
+                _editingFavoriteItem.Keyword = _newSettingsFavKeyword;
+
+                // Refresh the ListView by replacing the item
+                int idx = SettingsFavorites.IndexOf(_editingFavoriteItem);
+                if (idx >= 0)
+                {
+                    SettingsFavorites.RemoveAt(idx);
+                    SettingsFavorites.Insert(idx, new SettingsFavoriteItem
+                    {
+                        Name = name,
+                        Extension = _newSettingsFavExt,
+                        FolderPath = _newSettingsFavFolder,
+                        Keyword = _newSettingsFavKeyword,
+                    });
+                }
+
+                CancelEditFavorite();
+            }
+            else
+            {
+                // Add new item
+                AddSettingsFavorite();
+            }
+        }
+
+        public void AddSettingsFavorite()
+        {
+            string name = NewSettingsFavName;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = GenerateAutoName();
+            }
+
+            SettingsFavorites.Add(new SettingsFavoriteItem
+            {
+                Name = name,
+                Extension = _newSettingsFavExt,
+                FolderPath = _newSettingsFavFolder,
+                Keyword = _newSettingsFavKeyword,
+            });
+
+            NewSettingsFavName = "";
+            NewSettingsFavExt = "";
+            NewSettingsFavFolder = "";
+            NewSettingsFavKeyword = "";
+        }
+
+        private string GenerateAutoName()
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrEmpty(_newSettingsFavExt)) parts.Add(_newSettingsFavExt);
+            if (!string.IsNullOrEmpty(_newSettingsFavFolder))
+                parts.Add(System.IO.Path.GetFileName(_newSettingsFavFolder));
+            if (!string.IsNullOrEmpty(_newSettingsFavKeyword)) parts.Add(_newSettingsFavKeyword);
+            return parts.Count > 0 ? string.Join(" + ", parts) : "フィルタ " + (SettingsFavorites.Count + 1);
+        }
+
+        private void RefreshDrives()
+        {
+            LocalDrives.Clear();
+            NetworkDrives.Clear();
+
+            var localDrives = _detector.DetectLocalNtfsDrives();
+            foreach (var drive in localDrives)
+            {
+                var existing = _settings.LocalDrives?.FirstOrDefault(
+                    d => d.DriveLetter == drive.DriveLetter);
+
+                LocalDrives.Add(new DriveSelectionItem
+                {
+                    DriveLetter = drive.DriveLetter,
+                    DisplayName = drive.DisplayName,
+                    SizeInfo = drive.SizeDisplay,
+                    IsNetwork = false,
+                    IsSelected = existing?.Enabled ?? true,
+                });
+            }
+
+            var networkDrives = _detector.DetectMappedDrives();
+            foreach (var drive in networkDrives)
+            {
+                var existing = _settings.NetworkDrives?.FirstOrDefault(
+                    d => d.DriveLetter == drive.DriveLetter);
+
+                NetworkDrives.Add(new DriveSelectionItem
+                {
+                    DriveLetter = drive.DriveLetter,
+                    DisplayName = drive.DisplayName,
+                    SizeInfo = drive.SizeDisplay,
+                    UncPath = drive.UncPath,
+                    IsNetwork = true,
+                    IsSelected = existing?.Enabled ?? false,
+                });
+            }
+
+            OnPropertyChanged(nameof(HasNetworkDrives));
+        }
+
+        private void Save()
+        {
+            _settings.LocalDrives = LocalDrives.Select(d => new DriveSettings
+            {
+                DriveLetter = d.DriveLetter,
+                Enabled = d.IsSelected,
+            }).ToList();
+
+            _settings.NetworkDrives = NetworkDrives.Select(d => new NetworkDriveSettings
+            {
+                DriveLetter = d.DriveLetter,
+                UncPath = d.UncPath,
+                Enabled = d.IsSelected,
+            }).ToList();
+
+            _settings.MaxSearchResults = MaxSearchResults;
+            _settings.NetworkRescanIntervalMinutes = NetworkRescanIntervalMinutes;
+            _settings.ExcludeHiddenFiles = ExcludeHiddenFiles;
+            _settings.ExcludeSystemFiles = ExcludeSystemFiles;
+
+            _settings.ExcludePatterns = (ExcludePatternsText ?? "")
+                .Split(new[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToList();
+
+            // Save favorites from the settings tab
+            _settings.FavoriteFilters = SettingsFavorites.Select(f => new FavoriteFilter
+            {
+                Name = f.Name,
+                Extension = f.Extension,
+                FolderPath = f.FolderPath,
+                Keyword = f.Keyword,
+            }).ToList();
+
+            _settings.IsFirstRun = false;
+            _settingsService.Save(_settings);
+        }
+
+        public AppSettings GetCurrentSettings()
+        {
+            Save();
+            return _settings;
+        }
+    }
+}

@@ -159,7 +159,8 @@ namespace TNDexplorer.Core
             CancellationToken externalCt,
             TextExtractor extractor,
             AdvancedSearchOptions advancedOptions = null,
-            IProgress<ContentSearchProgress> progress = null)
+            IProgress<ContentSearchProgress> progress = null,
+            IReadOnlyList<string> contentSearchExtensions = null)
         {
             if (string.IsNullOrWhiteSpace(query) || extractor == null)
                 return new List<FileResultItem>();
@@ -183,7 +184,7 @@ namespace TNDexplorer.Core
                 return await Task.Run(() =>
                 {
                     // Step 1: Collect target files from FileIndex
-                    var targetFiles = CollectTargetFiles(advancedOptions, ct);
+                    var targetFiles = CollectTargetFiles(advancedOptions, contentSearchExtensions, ct);
                     int totalFiles = targetFiles.Count;
 
                     var results = new ConcurrentBag<FileResultItem>();
@@ -269,7 +270,8 @@ namespace TNDexplorer.Core
         /// <summary>
         /// Collect target files from the FileIndex based on folder path, extension, and size filters.
         /// </summary>
-        private List<ContentSearchTarget> CollectTargetFiles(AdvancedSearchOptions opts, CancellationToken ct)
+        private List<ContentSearchTarget> CollectTargetFiles(
+            AdvancedSearchOptions opts, IReadOnlyList<string> contentSearchExtensions, CancellationToken ct)
         {
             var targets = new List<ContentSearchTarget>();
             var allEntries = _index.GetAllEntries();
@@ -278,16 +280,30 @@ namespace TNDexplorer.Core
             string folderFilter = opts.FolderPath?.TrimEnd('\\', '/') ?? "";
             bool includeSubfolders = opts.IncludeSubfolders;
 
-            // Parse extension filter from advanced options
+            // Parse extension filter from advanced options (user's per-search filter)
             HashSet<string> extFilter = null;
             if (!string.IsNullOrWhiteSpace(opts.ExtensionFilter))
             {
                 extFilter = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var ef in opts.ExtensionFilter.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                foreach (var ef in opts.ExtensionFilter.Split(new[] { ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     string ext = ef.TrimStart('*').Trim();
+                    if (string.IsNullOrEmpty(ext)) continue;
                     if (!ext.StartsWith(".")) ext = "." + ext;
                     extFilter.Add(ext);
+                }
+            }
+
+            // Build allowed extensions set from settings (content search target extensions)
+            HashSet<string> allowedExtensions = null;
+            if (extFilter == null && contentSearchExtensions != null && contentSearchExtensions.Count > 0)
+            {
+                allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ext in contentSearchExtensions)
+                {
+                    string e = ext.Trim();
+                    if (!e.StartsWith(".")) e = "." + e;
+                    allowedExtensions.Add(e);
                 }
             }
 
@@ -302,14 +318,27 @@ namespace TNDexplorer.Core
                 if (dotIndex < 0) continue;
                 string entryExt = entry.Name.Substring(dotIndex);
 
-                // If user specified extension filter, use that; otherwise use TextExtractor-supported extensions
+                // Skip known binary extensions
+                if (IsBinaryExtension(entryExt)) continue;
+
+                // Filter by extensions:
+                // 1. User's per-search extension filter (detailed panel) takes priority
+                // 2. Otherwise, use settings' content search target extensions
+                // 3. If neither is set, skip files without a known text/IFilter-capable extension
                 if (extFilter != null)
                 {
                     if (!extFilter.Contains(entryExt)) continue;
                 }
+                else if (allowedExtensions != null)
+                {
+                    if (!allowedExtensions.Contains(entryExt)) continue;
+                }
                 else
                 {
-                    if (!TextExtractor.IsPlainTextExtension(entryExt)) continue;
+                    // No filter configured: allow plain text + common IFilter types
+                    if (!TextExtractor.IsPlainTextExtension(entryExt)
+                        && !IsIFilterExtension(entryExt))
+                        continue;
                 }
 
                 // Size check
@@ -431,6 +460,48 @@ namespace TNDexplorer.Core
             int sc = Interlocked.Increment(ref scannedCount);
             if (sc % 50 == 0 || sc == totalFiles)
                 ReportProgress(progress, sc, totalFiles, matchedCount);
+        }
+
+        /// <summary>
+        /// Known binary extensions that should never be content-searched.
+        /// </summary>
+        private static bool IsBinaryExtension(string ext)
+        {
+            switch (ext.ToLowerInvariant())
+            {
+                case ".exe": case ".dll": case ".sys": case ".ocx": case ".com": case ".scr":
+                case ".zip": case ".rar": case ".7z": case ".tar": case ".gz": case ".bz2":
+                case ".xz": case ".cab": case ".iso":
+                case ".png": case ".jpg": case ".jpeg": case ".gif": case ".bmp": case ".ico":
+                case ".tiff": case ".tif": case ".svg": case ".webp": case ".psd":
+                case ".mp3": case ".wav": case ".flac": case ".aac": case ".ogg": case ".wma":
+                case ".mp4": case ".avi": case ".mkv": case ".mov": case ".wmv": case ".flv":
+                case ".webm": case ".m4v":
+                case ".mdb": case ".accdb": case ".sqlite": case ".db":
+                case ".ttf": case ".otf": case ".woff": case ".woff2":
+                case ".obj": case ".lib": case ".pdb": case ".dat": case ".bin":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Extensions that can be handled by IFilter (Office, PDF, etc).
+        /// </summary>
+        private static bool IsIFilterExtension(string ext)
+        {
+            switch (ext.ToLowerInvariant())
+            {
+                case ".doc": case ".docx": case ".xls": case ".xlsx":
+                case ".ppt": case ".pptx": case ".pdf":
+                case ".odt": case ".ods": case ".odp":
+                case ".msg": case ".eml":
+                case ".vsd": case ".vsdx":
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private class ContentSearchTarget

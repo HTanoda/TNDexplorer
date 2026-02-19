@@ -624,8 +624,7 @@ namespace TNDexplorer.ViewModels
                             StatusText = "内容検索: フォルダを指定してください";
                             System.Windows.MessageBox.Show(
                                 "内容検索にはフォルダの指定が必要です。\n\n" +
-                                "詳細パネルの「フォルダ」欄で検索対象フォルダを指定してください。\n" +
-                                "（フォルダ範囲を絞ることで高速に検索できます）",
+                                "詳細パネルの「フォルダ」欄で検索対象フォルダを指定してください。",
                                 "内容検索",
                                 System.Windows.MessageBoxButton.OK,
                                 System.Windows.MessageBoxImage.Information);
@@ -649,7 +648,8 @@ namespace TNDexplorer.ViewModels
 
                     results = await _indexManager.SearchEngine.ContentSearchAsync(
                         query, _currentFilter, _settings.MaxSearchResults, ct,
-                        _indexManager.TextExtractor, advOptions, progress)
+                        _indexManager.TextExtractor, advOptions, progress,
+                        _settings.FullTextTargetExtensions)
                         .ConfigureAwait(false);
 
                     _dispatcher.BeginInvoke(new Action(() =>

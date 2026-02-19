@@ -241,6 +241,79 @@
                     </GroupBox>
                 </Grid>
             </TabItem>
+
+            <!-- 全文検索 タブ -->
+            <TabItem Header="全文検索" Padding="12,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+                    <StackPanel>
+                        <!-- Enable/Disable -->
+                        <TextBlock Text="全文検索機能"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <CheckBox IsChecked="{Binding FullTextSearchEnabled}" Margin="5,3"
+                                  Content="全文検索を有効にする"
+                                  ToolTip="ファイルの中身をインデックス化し、内容で検索できるようになります。&#10;有効にすると、バックグラウンドでインデックスの構築が開始されます。"/>
+                        <TextBlock Text="※ インデックス構築にはディスク容量と時間がかかります。"
+                                   FontSize="11" Foreground="Gray" Margin="25,2,0,12"/>
+
+                        <!-- Index Status -->
+                        <TextBlock Text="インデックス状態"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <StackPanel Margin="5,0,0,15">
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <TextBlock Text="登録済みファイル数 / DB容量:" VerticalAlignment="Center" Width="210"/>
+                                <TextBlock Text="{Binding FullTextIndexStatus}" FontWeight="Medium"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Index Management -->
+                        <StackPanel Orientation="Horizontal" Margin="5,0,0,15">
+                            <Button Content="インデックス再構築" Padding="12,4" FontSize="12"
+                                    Command="{Binding RebuildFullTextIndexCommand}"
+                                    Background="#FF0078D4" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"/>
+                            <Button Content="インデックス削除" Padding="12,4" FontSize="12" Margin="8,0,0,0"
+                                    Command="{Binding DeleteFullTextIndexCommand}"
+                                    Background="#FFDC3545" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"/>
+                        </StackPanel>
+
+                        <!-- Target Extensions -->
+                        <TextBlock Text="対象拡張子"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <TextBlock Text="セミコロン（;）区切りで対象拡張子を指定します。"
+                                   FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                        <TextBox Text="{Binding FullTextTargetExtensionsText, UpdateSourceTrigger=PropertyChanged}"
+                                 FontSize="12" Padding="4,3"
+                                 AcceptsReturn="False" TextWrapping="Wrap"
+                                 Height="60" VerticalScrollBarVisibility="Auto"
+                                 ToolTip="例: .txt; .csv; .pdf; .docx; .xlsx; .pptx"/>
+
+                        <!-- Max File Size -->
+                        <TextBlock Text="最大ファイルサイズ"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,12,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="5,0,0,0">
+                            <TextBox Text="{Binding FullTextMaxFileSizeMB}" Width="80"
+                                     FontSize="12" Padding="4,3"/>
+                            <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            <TextBlock Text="(この値を超えるファイルはスキップされます)"
+                                       FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+
+                        <!-- Notes -->
+                        <TextBlock FontSize="11" Foreground="Gray" Margin="0,15,0,0" TextWrapping="Wrap">
+                            <Run Text="注意事項:"/>
+                            <LineBreak/>
+                            <Run Text="・Office文書 (.docx/.xlsx/.pptx) はOfficeインストール環境でのみ対応"/>
+                            <LineBreak/>
+                            <Run Text="・PDF文書は Windows Search / Adobe Reader がインストールされている環境で対応"/>
+                            <LineBreak/>
+                            <Run Text="・単語単位での検索が可能です（FTS4 unicode61トークナイザ使用）"/>
+                            <LineBreak/>
+                            <Run Text="・インデックス構築中でも部分的に内容検索が可能です"/>
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
 
         <!-- Bottom buttons -->

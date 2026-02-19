@@ -58,6 +58,10 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="System.Data.SQLite, Version=1.0.118.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\lib\net46\System.Data.SQLite.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -109,6 +113,10 @@
     <Compile Include="Core\PreviewHandlerHost.cs" />
     <Compile Include="Core\PdfRenderer.cs" />
     <Compile Include="Core\IndexManager.cs" />
+    <Compile Include="Core\TextExtractor.cs" />
+    <Compile Include="Core\FullTextIndex.cs" />
+    <Compile Include="Core\FullTextCrawler.cs" />
+    <Compile Include="Native\IFilterInterop.cs" />
     <Compile Include="Models\FileResultItem.cs" />
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\IndexStatistics.cs" />
@@ -146,7 +154,9 @@
     <Compile Include="Services\NetworkIndexCache.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <None Include="app.manifest" />
+    <None Include="packages.config" />
     <Resource Include="Resources\app.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="..\..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets" Condition="Exists('..\..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.118.0\build\net46\Stub.System.Data.SQLite.Core.NetFramework.targets')" />
 </Project>

@@ -392,6 +392,20 @@ namespace TNDexplorer.Core
             return dir + "\\" + entry.Name;
         }
 
+        /// <summary>
+        /// Get a snapshot of all entries in the index.
+        /// Returns a copy of the internal array for safe enumeration.
+        /// </summary>
+        public FileEntry[] GetAllEntries()
+        {
+            lock (_lock)
+            {
+                var snapshot = new FileEntry[_count];
+                Array.Copy(_entries, snapshot, _count);
+                return snapshot;
+            }
+        }
+
         public void Clear()
         {
             lock (_lock)

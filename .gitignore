@@ -11,6 +11,7 @@ obj/
 
 # NuGet
 packages/
+nuget.exe
 
 # OS files
 Thumbs.db

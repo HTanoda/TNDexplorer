@@ -22,6 +22,12 @@ namespace TNDexplorer.Models
         /// </summary>
         public string FiscalYearLabel { get; set; }
 
+        /// <summary>
+        /// Content snippet from full-text search (FTS5 snippet() output).
+        /// Null when using filename search mode.
+        /// </summary>
+        public string ContentSnippet { get; set; }
+
         public string Extension
         {
             get

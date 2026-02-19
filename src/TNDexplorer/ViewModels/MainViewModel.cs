@@ -76,6 +76,11 @@ namespace TNDexplorer.ViewModels
         private bool _alternateRowColors;
         private bool _groupByFiscalYear;
 
+        // Full-text search
+        private bool _isContentSearch;
+        private bool _isFullTextSearchAvailable;
+        private string _fullTextStatus = "";
+
         private DispatcherTimer _debounceTimer;
         private DispatcherTimer _favStatusTimer;
 
@@ -320,6 +325,29 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _groupByFiscalYear, value);
         }
 
+        // Full-text search
+        public bool IsContentSearch
+        {
+            get => _isContentSearch;
+            set
+            {
+                if (SetProperty(ref _isContentSearch, value))
+                    ScheduleSearch();
+            }
+        }
+
+        public bool IsFullTextSearchAvailable
+        {
+            get => _isFullTextSearchAvailable;
+            private set => SetProperty(ref _isFullTextSearchAvailable, value);
+        }
+
+        public string FullTextStatus
+        {
+            get => _fullTextStatus;
+            private set => SetProperty(ref _fullTextStatus, value);
+        }
+
         // Commands
         public RelayCommand OpenFileCommand { get; }
         public RelayCommand OpenFolderCommand { get; }
@@ -364,6 +392,7 @@ namespace TNDexplorer.ViewModels
             OpenAboutCommand = new RelayCommand(() => RequestOpenAbout?.Invoke());
 
             _indexManager.ProgressChanged += OnIndexingProgress;
+            _indexManager.FullTextProgressChanged += OnFullTextProgress;
 
             _debounceTimer = new DispatcherTimer
             {
@@ -571,13 +600,39 @@ namespace TNDexplorer.ViewModels
 
             try
             {
-                StatusText = "検索中...";
-
                 var advOptions = BuildAdvancedOptions();
+                List<FileResultItem> results;
 
-                var results = await _indexManager.SearchEngine.SearchAsync(
-                    query, _currentFilter, _settings.MaxSearchResults, ct, advOptions)
-                    .ConfigureAwait(false);
+                // Content search mode
+                if (_isContentSearch && _indexManager.IsFullTextSearchAvailable)
+                {
+                    int minLen = _indexManager.FullTextIndex?.MinQueryLength ?? 3;
+                    if (string.IsNullOrWhiteSpace(query) || query.Length < minLen)
+                    {
+                        _dispatcher.Invoke(() =>
+                        {
+                            Results = new List<FileResultItem>();
+                            StatusText = $"内容検索: {minLen}文字以上のキーワードを入力してください";
+                        });
+                        return;
+                    }
+
+                    StatusText = "内容検索中...";
+
+                    results = await _indexManager.SearchEngine.ContentSearchAsync(
+                        query, _currentFilter, _settings.MaxSearchResults, ct,
+                        _indexManager.FullTextIndex, advOptions)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    // Filename search mode (default)
+                    StatusText = "検索中...";
+
+                    results = await _indexManager.SearchEngine.SearchAsync(
+                        query, _currentFilter, _settings.MaxSearchResults, ct, advOptions)
+                        .ConfigureAwait(false);
+                }
 
                 if (!ct.IsCancellationRequested)
                 {
@@ -606,7 +661,25 @@ namespace TNDexplorer.ViewModels
                     IndexStatusText = e.Message;
 
                 IsIndexing = e.State == IndexingState.Indexing;
+                IsFullTextSearchAvailable = _indexManager.IsFullTextSearchAvailable;
                 UpdateStatusText();
+            }));
+        }
+
+        private void OnFullTextProgress(object sender, FullTextCrawlProgressEventArgs e)
+        {
+            _dispatcher.BeginInvoke(new Action(() =>
+            {
+                IsFullTextSearchAvailable = _indexManager.IsFullTextSearchAvailable;
+
+                if (e.IsComplete)
+                {
+                    FullTextStatus = $"全文検索: {e.ProcessedFiles:N0} 件処理完了";
+                }
+                else
+                {
+                    FullTextStatus = $"全文検索: {e.ProcessedFiles:N0}/{e.TotalTargetFiles:N0} 件処理中...";
+                }
             }));
         }
 
@@ -639,9 +712,11 @@ namespace TNDexplorer.ViewModels
         private void UpdateStatusText()
         {
             int total = _indexManager.Index.TotalCount;
+            string mode = _isContentSearch ? "[内容検索] " : "";
+
             if (!string.IsNullOrWhiteSpace(_searchText) || HasAdvancedFilters())
             {
-                StatusText = $"{ResultCount:N0} 件ヒット (全 {total:N0} 件中)";
+                StatusText = $"{mode}{ResultCount:N0} 件ヒット (全 {total:N0} 件中)";
             }
             else
             {
@@ -695,6 +770,24 @@ namespace TNDexplorer.ViewModels
             AlternateRowColors = settings.AlternateRowColors;
             GroupByFiscalYear = settings.GroupByFiscalYear;
             LoadFavorites();
+
+            // Handle FTS enable/disable changes
+            bool ftsWasEnabled = _settings.FullTextSearchEnabled;
+            _settings.FullTextSearchEnabled = settings.FullTextSearchEnabled;
+            _settings.FullTextTargetExtensions = settings.FullTextTargetExtensions;
+            _settings.FullTextMaxFileSizeMB = settings.FullTextMaxFileSizeMB;
+
+            if (settings.FullTextSearchEnabled && !ftsWasEnabled)
+            {
+                _indexManager.EnableFullTextSearch(settings);
+            }
+            else if (!settings.FullTextSearchEnabled && ftsWasEnabled)
+            {
+                _indexManager.DisableFullTextSearch();
+                IsContentSearch = false;
+            }
+
+            IsFullTextSearchAvailable = _indexManager.IsFullTextSearchAvailable;
         }
 
         public void Dispose()

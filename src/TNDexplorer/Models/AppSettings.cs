@@ -54,6 +54,16 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public List<FavoriteFilter> FavoriteFilters { get; set; } = new List<FavoriteFilter>();
+
+        // Full-text search settings
+        [DataMember]
+        public bool FullTextSearchEnabled { get; set; } = false;
+
+        [DataMember]
+        public List<string> FullTextTargetExtensions { get; set; } = new List<string>();
+
+        [DataMember]
+        public long FullTextMaxFileSizeMB { get; set; } = 50;
     }
 
     [DataContract]

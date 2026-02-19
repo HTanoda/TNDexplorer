@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TNDexplorer.Models;
+using TNDexplorer.Native;
 using TNDexplorer.Services;
 
 namespace TNDexplorer.Core
@@ -42,10 +43,19 @@ namespace TNDexplorer.Core
         private AppSettings _currentSettings;
         private Timer _rescanTimer;
 
+        // Full-text search components
+        private TextExtractor _textExtractor;
+        private FullTextIndex _ftsIndex;
+        private FullTextCrawler _ftsCrawler;
+
         public FileIndex Index => _index;
         public SearchEngine SearchEngine => _searchEngine;
+        public FullTextIndex FullTextIndex => _ftsIndex;
+        public FullTextCrawler FullTextCrawler => _ftsCrawler;
+        public bool IsFullTextSearchAvailable => _ftsIndex != null && _ftsCrawler != null;
         public IndexingState State { get; private set; } = IndexingState.NotStarted;
         public event EventHandler<IndexingProgressEventArgs> ProgressChanged;
+        public event EventHandler<FullTextCrawlProgressEventArgs> FullTextProgressChanged;
 
         public IndexManager(SettingsService settingsService)
         {
@@ -125,6 +135,12 @@ namespace TNDexplorer.Core
                     int intervalMs = settings.NetworkRescanIntervalMinutes * 60 * 1000;
                     _rescanTimer = new Timer(OnRescanTimerTick, null, intervalMs, intervalMs);
                 }
+
+                // Initialize full-text search if enabled
+                if (settings.FullTextSearchEnabled)
+                {
+                    InitializeFullTextSearch(settings);
+                }
             }
             catch (Exception ex)
             {
@@ -171,6 +187,13 @@ namespace TNDexplorer.Core
                 monitor.FileChanged += (s, e) =>
                 {
                     RaiseProgress(null, _index.TotalCount, IndexingState.Ready);
+
+                    // Forward file changes to FTS crawler if active
+                    if (_ftsCrawler != null && e.Entry != null)
+                    {
+                        string fullPath = _index.ResolveFullPath(e.Entry);
+                        _ftsCrawler.OnFileChanged(fullPath, e.ChangeType);
+                    }
                 };
                 monitor.Start();
             }
@@ -390,6 +413,119 @@ namespace TNDexplorer.Core
                 State);
         }
 
+        /// <summary>
+        /// Initialize the full-text search subsystem.
+        /// Creates TextExtractor, FullTextIndex, and FullTextCrawler.
+        /// </summary>
+        private void InitializeFullTextSearch(AppSettings settings)
+        {
+            try
+            {
+                // Check if IFilter (query.dll) is available
+                if (!IFilterNativeMethods.IsIFilterAvailable())
+                {
+                    System.Diagnostics.Debug.WriteLine("IFilter (query.dll) is not available. FTS will use plain text extraction only.");
+                }
+
+                _textExtractor = new TextExtractor
+                {
+                    MaxFileSizeBytes = settings.FullTextMaxFileSizeMB * 1024 * 1024,
+                };
+
+                _ftsIndex = new FullTextIndex();
+
+                string tokenInfo = "FTS4 unicode61 (単語検索)";
+                System.Diagnostics.Debug.WriteLine($"FTS initialized: {tokenInfo}");
+
+                var targetExtensions = settings.FullTextTargetExtensions;
+                if (targetExtensions == null || targetExtensions.Count == 0)
+                    targetExtensions = new List<string>(FullTextCrawler.DefaultTargetExtensions);
+
+                _ftsCrawler = new FullTextCrawler(
+                    _index,
+                    _ftsIndex,
+                    _textExtractor,
+                    targetExtensions,
+                    settings.FullTextMaxFileSizeMB);
+
+                _ftsCrawler.ProgressChanged += (s, e) =>
+                {
+                    FullTextProgressChanged?.Invoke(this, e);
+                };
+
+                // Start crawling in background
+                _ftsCrawler.StartCrawl(_cts.Token);
+
+                RaiseProgress($"全文検索インデックス構築を開始しました ({tokenInfo})", _index.TotalCount, IndexingState.Ready);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize FTS: {ex.Message}\n{ex.StackTrace}");
+                RaiseProgress($"全文検索の初期化に失敗しました: {ex.Message}", _index.TotalCount, IndexingState.Ready);
+                DisposeFts();
+            }
+        }
+
+        /// <summary>
+        /// Enable full-text search at runtime (called from settings change).
+        /// </summary>
+        public void EnableFullTextSearch(AppSettings settings)
+        {
+            if (_ftsIndex != null) return; // Already enabled
+            InitializeFullTextSearch(settings);
+        }
+
+        /// <summary>
+        /// Disable full-text search at runtime.
+        /// </summary>
+        public void DisableFullTextSearch()
+        {
+            DisposeFts();
+        }
+
+        /// <summary>
+        /// Rebuild the full-text search index from scratch.
+        /// </summary>
+        public void RebuildFullTextIndex(AppSettings settings)
+        {
+            DisposeFts();
+            InitializeFullTextSearch(settings);
+        }
+
+        /// <summary>
+        /// Delete the full-text search database.
+        /// </summary>
+        public void DeleteFullTextIndex()
+        {
+            var ftsIndex = _ftsIndex;
+            DisposeFts();
+            if (ftsIndex != null)
+            {
+                try { ftsIndex.DeleteDatabase(); }
+                catch { }
+            }
+            else
+            {
+                // Try to delete even if not currently initialized
+                try
+                {
+                    string dbPath = FullTextIndex.DefaultDbPath;
+                    if (System.IO.File.Exists(dbPath))
+                        System.IO.File.Delete(dbPath);
+                }
+                catch { }
+            }
+        }
+
+        private void DisposeFts()
+        {
+            _ftsCrawler?.Dispose();
+            _ftsCrawler = null;
+            _ftsIndex?.Dispose();
+            _ftsIndex = null;
+            _textExtractor = null;
+        }
+
         private void RaiseProgress(string message, int totalEntries, IndexingState state)
         {
             ProgressChanged?.Invoke(this, new IndexingProgressEventArgs
@@ -406,6 +542,9 @@ namespace TNDexplorer.Core
             {
                 _cts?.Cancel();
                 _rescanTimer?.Dispose();
+
+                // Dispose FTS components
+                DisposeFts();
 
                 foreach (var monitor in _usnMonitors)
                     monitor.Dispose();

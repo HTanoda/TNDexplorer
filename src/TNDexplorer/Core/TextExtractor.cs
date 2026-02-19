@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using TNDexplorer.Native;
 
 namespace TNDexplorer.Core
@@ -107,6 +109,22 @@ namespace TNDexplorer.Core
             if (_iFilterAvailable)
             {
                 string text = ExtractViaIFilter(filePath, maxTextLength);
+                if (text != null)
+                    return text;
+            }
+
+            // Fallback: extract from Office OpenXML (.docx/.xlsx/.pptx) by unzipping
+            if (IsOpenXmlExtension(ext))
+            {
+                string text = ExtractFromOpenXml(filePath, ext, maxTextLength);
+                if (text != null)
+                    return text;
+            }
+
+            // Fallback: extract text from PDF by parsing raw streams
+            if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                string text = ExtractFromPdf(filePath, maxTextLength);
                 if (text != null)
                     return text;
             }
@@ -281,6 +299,428 @@ namespace TNDexplorer.Core
             // Only report as UTF-8 if we found multi-byte sequences
             // (pure ASCII is ambiguous, default to UTF-8 as it's most common now)
             return true;
+        }
+
+        /// <summary>
+        /// Check if extension is an Office OpenXML format (ZIP-based).
+        /// </summary>
+        private static bool IsOpenXmlExtension(string ext)
+        {
+            switch (ext.ToLowerInvariant())
+            {
+                case ".docx": case ".xlsx": case ".pptx":
+                case ".docm": case ".xlsm": case ".pptm":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Extract text from Office OpenXML files by reading XML entries from the ZIP archive.
+        /// Works without Office/IFilter installed.
+        /// </summary>
+        private string ExtractFromOpenXml(string filePath, string ext, int maxTextLength)
+        {
+            try
+            {
+                using (var zip = ZipFile.OpenRead(filePath))
+                {
+                    var sb = new StringBuilder();
+                    string lowerExt = ext.ToLowerInvariant();
+
+                    if (lowerExt == ".docx" || lowerExt == ".docm")
+                    {
+                        // Word: read word/document.xml
+                        ExtractTextFromZipEntry(zip, "word/document.xml", sb, maxTextLength);
+                    }
+                    else if (lowerExt == ".xlsx" || lowerExt == ".xlsm")
+                    {
+                        // Excel: read xl/sharedStrings.xml (contains all cell text)
+                        ExtractTextFromZipEntry(zip, "xl/sharedStrings.xml", sb, maxTextLength);
+                        // Also try worksheet data
+                        if (sb.Length < maxTextLength)
+                        {
+                            foreach (var entry in zip.Entries)
+                            {
+                                if (entry.FullName.StartsWith("xl/worksheets/", StringComparison.OrdinalIgnoreCase)
+                                    && entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    ExtractTextFromZipEntry(zip, entry.FullName, sb, maxTextLength);
+                                    if (sb.Length >= maxTextLength) break;
+                                }
+                            }
+                        }
+                    }
+                    else if (lowerExt == ".pptx" || lowerExt == ".pptm")
+                    {
+                        // PowerPoint: read ppt/slides/slide*.xml
+                        foreach (var entry in zip.Entries)
+                        {
+                            if (entry.FullName.StartsWith("ppt/slides/slide", StringComparison.OrdinalIgnoreCase)
+                                && entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                            {
+                                ExtractTextFromZipEntry(zip, entry.FullName, sb, maxTextLength);
+                                if (sb.Length >= maxTextLength) break;
+                            }
+                        }
+                        // Also read from notes
+                        if (sb.Length < maxTextLength)
+                        {
+                            foreach (var entry in zip.Entries)
+                            {
+                                if (entry.FullName.StartsWith("ppt/notesSlides/", StringComparison.OrdinalIgnoreCase)
+                                    && entry.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    ExtractTextFromZipEntry(zip, entry.FullName, sb, maxTextLength);
+                                    if (sb.Length >= maxTextLength) break;
+                                }
+                            }
+                        }
+                    }
+
+                    return sb.Length > 0 ? sb.ToString() : null;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Read a ZIP entry and extract text content by stripping XML tags.
+        /// </summary>
+        private static void ExtractTextFromZipEntry(ZipArchive zip, string entryName, StringBuilder sb, int maxTextLength)
+        {
+            var entry = zip.GetEntry(entryName);
+            if (entry == null)
+            {
+                // Try case-insensitive match
+                foreach (var e in zip.Entries)
+                {
+                    if (e.FullName.Equals(entryName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        entry = e;
+                        break;
+                    }
+                }
+            }
+            if (entry == null) return;
+
+            try
+            {
+                using (var stream = entry.Open())
+                using (var reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    string xml = reader.ReadToEnd();
+                    // Strip XML tags and extract text content
+                    string text = StripXmlTags(xml);
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        if (sb.Length > 0) sb.Append(' ');
+                        int remaining = maxTextLength - sb.Length;
+                        if (text.Length > remaining)
+                            sb.Append(text, 0, remaining);
+                        else
+                            sb.Append(text);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Strip XML tags and return text content.
+        /// Preserves spaces between elements.
+        /// </summary>
+        private static string StripXmlTags(string xml)
+        {
+            if (string.IsNullOrEmpty(xml)) return null;
+
+            // Remove XML tags, keeping text content
+            var sb = new StringBuilder(xml.Length / 3);
+            bool inTag = false;
+            bool lastWasSpace = true;
+
+            for (int i = 0; i < xml.Length; i++)
+            {
+                char c = xml[i];
+                if (c == '<')
+                {
+                    inTag = true;
+                    // Add space between elements if not already present
+                    if (sb.Length > 0 && !lastWasSpace)
+                    {
+                        sb.Append(' ');
+                        lastWasSpace = true;
+                    }
+                }
+                else if (c == '>')
+                {
+                    inTag = false;
+                }
+                else if (!inTag)
+                {
+                    if (c == '&')
+                    {
+                        // Handle XML entities
+                        int semicolonIdx = xml.IndexOf(';', i + 1);
+                        if (semicolonIdx > i && semicolonIdx - i < 10)
+                        {
+                            string entity = xml.Substring(i + 1, semicolonIdx - i - 1);
+                            switch (entity)
+                            {
+                                case "amp": sb.Append('&'); break;
+                                case "lt": sb.Append('<'); break;
+                                case "gt": sb.Append('>'); break;
+                                case "quot": sb.Append('"'); break;
+                                case "apos": sb.Append('\''); break;
+                                default:
+                                    if (entity.StartsWith("#"))
+                                    {
+                                        try
+                                        {
+                                            int code = entity.StartsWith("#x", StringComparison.OrdinalIgnoreCase)
+                                                ? Convert.ToInt32(entity.Substring(2), 16)
+                                                : int.Parse(entity.Substring(1));
+                                            sb.Append((char)code);
+                                        }
+                                        catch { sb.Append(' '); }
+                                    }
+                                    else { sb.Append(' '); }
+                                    break;
+                            }
+                            i = semicolonIdx;
+                            lastWasSpace = false;
+                        }
+                    }
+                    else if (char.IsWhiteSpace(c))
+                    {
+                        if (!lastWasSpace)
+                        {
+                            sb.Append(' ');
+                            lastWasSpace = true;
+                        }
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                        lastWasSpace = false;
+                    }
+                }
+            }
+
+            return sb.Length > 0 ? sb.ToString().Trim() : null;
+        }
+
+        /// <summary>
+        /// Extract text from PDF files by parsing content streams.
+        /// Handles basic text operators (Tj, TJ, ', ") for both ASCII and UTF-16BE encoded text.
+        /// This is a lightweight fallback when IFilter/Adobe is not available.
+        /// </summary>
+        private string ExtractFromPdf(string filePath, int maxTextLength)
+        {
+            try
+            {
+                byte[] data;
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    // Limit read size
+                    long readSize = Math.Min(fs.Length, maxTextLength * 4L);
+                    data = new byte[readSize];
+                    fs.Read(data, 0, data.Length);
+                }
+
+                string raw = Encoding.GetEncoding(1252).GetString(data);
+                var sb = new StringBuilder();
+
+                // Find and decode text from stream content between BT...ET blocks
+                int pos = 0;
+                while (pos < raw.Length && sb.Length < maxTextLength)
+                {
+                    int btStart = raw.IndexOf("BT", pos, StringComparison.Ordinal);
+                    if (btStart < 0) break;
+
+                    int etEnd = raw.IndexOf("ET", btStart + 2, StringComparison.Ordinal);
+                    if (etEnd < 0) break;
+
+                    string block = raw.Substring(btStart, etEnd - btStart + 2);
+                    ExtractPdfTextOperators(block, sb, maxTextLength);
+                    pos = etEnd + 2;
+                }
+
+                if (sb.Length == 0) return null;
+
+                // Clean up the result
+                string result = sb.ToString();
+                // Remove excessive whitespace
+                result = Regex.Replace(result, @"\s{3,}", "  ");
+                return result.Length > 0 ? result : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Extract text from PDF text operators within a BT...ET block.
+        /// </summary>
+        private static void ExtractPdfTextOperators(string block, StringBuilder sb, int maxTextLength)
+        {
+            int i = 0;
+            while (i < block.Length && sb.Length < maxTextLength)
+            {
+                // Look for parenthesized strings: (text) Tj or (text) '
+                if (block[i] == '(')
+                {
+                    int depth = 1;
+                    int start = i + 1;
+                    i++;
+                    while (i < block.Length && depth > 0)
+                    {
+                        if (block[i] == '\\') { i += 2; continue; }
+                        if (block[i] == '(') depth++;
+                        if (block[i] == ')') depth--;
+                        if (depth > 0) i++;
+                    }
+                    if (depth == 0)
+                    {
+                        string text = block.Substring(start, i - start);
+                        string decoded = DecodePdfString(text);
+                        if (!string.IsNullOrEmpty(decoded))
+                            sb.Append(decoded);
+                    }
+                    i++;
+                }
+                // Look for hex strings: <hex> Tj
+                else if (block[i] == '<' && i + 1 < block.Length && block[i + 1] != '<')
+                {
+                    int end = block.IndexOf('>', i + 1);
+                    if (end > i)
+                    {
+                        string hex = block.Substring(i + 1, end - i - 1).Trim();
+                        if (hex.Length > 0 && hex.Length % 4 == 0)
+                        {
+                            // Likely UTF-16BE encoded
+                            string decoded = DecodeHexUtf16(hex);
+                            if (!string.IsNullOrEmpty(decoded))
+                                sb.Append(decoded);
+                        }
+                        i = end + 1;
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                }
+                // Td/TD (text positioning) - add space
+                else if (i + 2 < block.Length
+                    && (block[i] == 'T' && (block[i + 1] == 'd' || block[i + 1] == 'D'))
+                    && (i + 2 >= block.Length || !char.IsLetter(block[i + 2])))
+                {
+                    if (sb.Length > 0 && sb[sb.Length - 1] != ' ' && sb[sb.Length - 1] != '\n')
+                        sb.Append(' ');
+                    i += 2;
+                }
+                // T* (new line)
+                else if (i + 2 < block.Length && block[i] == 'T' && block[i + 1] == '*')
+                {
+                    if (sb.Length > 0)
+                        sb.Append(' ');
+                    i += 2;
+                }
+                else
+                {
+                    i++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Decode a PDF parenthesized string, handling escape sequences.
+        /// </summary>
+        private static string DecodePdfString(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+
+            var sb = new StringBuilder(text.Length);
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\\' && i + 1 < text.Length)
+                {
+                    char next = text[i + 1];
+                    switch (next)
+                    {
+                        case 'n': sb.Append('\n'); i++; break;
+                        case 'r': sb.Append('\r'); i++; break;
+                        case 't': sb.Append('\t'); i++; break;
+                        case '(': sb.Append('('); i++; break;
+                        case ')': sb.Append(')'); i++; break;
+                        case '\\': sb.Append('\\'); i++; break;
+                        default:
+                            // Octal escape
+                            if (next >= '0' && next <= '7')
+                            {
+                                string octal = "" + next;
+                                if (i + 2 < text.Length && text[i + 2] >= '0' && text[i + 2] <= '7')
+                                {
+                                    octal += text[i + 2];
+                                    if (i + 3 < text.Length && text[i + 3] >= '0' && text[i + 3] <= '7')
+                                        octal += text[i + 3];
+                                }
+                                int code = Convert.ToInt32(octal, 8);
+                                sb.Append((char)code);
+                                i += octal.Length;
+                            }
+                            else
+                            {
+                                sb.Append(next);
+                                i++;
+                            }
+                            break;
+                    }
+                }
+                else
+                {
+                    sb.Append(text[i]);
+                }
+            }
+            return sb.Length > 0 ? sb.ToString() : null;
+        }
+
+        /// <summary>
+        /// Decode hex-encoded UTF-16BE string from PDF.
+        /// </summary>
+        private static string DecodeHexUtf16(string hex)
+        {
+            try
+            {
+                // Remove whitespace
+                hex = hex.Replace(" ", "").Replace("\n", "").Replace("\r", "");
+                if (hex.Length < 4 || hex.Length % 4 != 0) return null;
+
+                var bytes = new byte[hex.Length / 2];
+                for (int i = 0; i < hex.Length; i += 2)
+                {
+                    bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
+                }
+
+                string result = Encoding.BigEndianUnicode.GetString(bytes);
+                // Filter out control characters
+                var sb = new StringBuilder(result.Length);
+                foreach (char c in result)
+                {
+                    if (c >= 32 || c == '\n' || c == '\r' || c == '\t')
+                        sb.Append(c);
+                }
+                return sb.Length > 0 ? sb.ToString() : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>

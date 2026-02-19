@@ -62,6 +62,21 @@ namespace TNDexplorer.Services
             }
         }
 
+        public void CopyFileToClipboard(string fullPath)
+        {
+            try
+            {
+                var fileCollection = new System.Collections.Specialized.StringCollection();
+                fileCollection.Add(fullPath);
+                Clipboard.SetFileDropList(fileCollection);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"コピーに失敗しました:\n{ex.Message}",
+                    "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         public void ShowProperties(string fullPath)
         {
             try

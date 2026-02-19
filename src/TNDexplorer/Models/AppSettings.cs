@@ -16,6 +16,16 @@ namespace TNDexplorer.Models
         public List<string> ExcludePatterns { get; set; } = new List<string>();
 
         [DataMember]
+        public List<CustomFolderSettings> CustomFolders { get; set; } = new List<CustomFolderSettings>();
+
+        // Display settings
+        [DataMember]
+        public bool AlternateRowColors { get; set; } = false;
+
+        [DataMember]
+        public bool GroupByFiscalYear { get; set; } = false;
+
+        [DataMember]
         public int MaxSearchResults { get; set; } = 100000;
 
         [DataMember]
@@ -83,6 +93,16 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public string UncPath { get; set; }
+
+        [DataMember]
+        public bool Enabled { get; set; } = true;
+    }
+
+    [DataContract]
+    public class CustomFolderSettings
+    {
+        [DataMember]
+        public string FolderPath { get; set; }
 
         [DataMember]
         public bool Enabled { get; set; } = true;

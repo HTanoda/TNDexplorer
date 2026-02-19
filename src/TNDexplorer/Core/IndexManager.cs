@@ -88,7 +88,28 @@ namespace TNDexplorer.Core
                         settings.ExcludePatterns, _cts.Token)));
                 }
 
-                await Task.WhenAll(localTasks.Concat(networkTasks)).ConfigureAwait(false);
+                // Index custom folders (filesystem enumeration, like network drives)
+                var customFolderTasks = new List<Task>();
+                if (settings.CustomFolders != null)
+                {
+                    foreach (var folder in settings.CustomFolders.Where(f => f.Enabled))
+                    {
+                        if (string.IsNullOrWhiteSpace(folder.FolderPath)) continue;
+                        if (!System.IO.Directory.Exists(folder.FolderPath)) continue;
+
+                        byte driveIndex = _nextDriveIndex++;
+                        // Use folder path as a pseudo drive letter
+                        string pseudoDrive = folder.FolderPath;
+                        _index.SetDriveLetter(driveIndex, pseudoDrive);
+
+                        string rootPath = folder.FolderPath;
+                        customFolderTasks.Add(Task.Run(() => IndexCustomFolder(
+                            rootPath, driveIndex,
+                            settings.ExcludePatterns, _cts.Token)));
+                    }
+                }
+
+                await Task.WhenAll(localTasks.Concat(networkTasks).Concat(customFolderTasks)).ConfigureAwait(false);
 
                 State = IndexingState.Ready;
                 RaiseProgress("インデックス構築完了", _index.TotalCount, IndexingState.Ready);
@@ -304,6 +325,41 @@ namespace TNDexplorer.Core
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Network rescan failed: {ex.Message}");
+            }
+        }
+
+        private void IndexCustomFolder(string rootPath, byte driveIndex,
+            IReadOnlyList<string> excludePatterns, CancellationToken ct)
+        {
+            RaiseProgress($"{rootPath} をスキャン中...", _index.TotalCount, IndexingState.Indexing);
+
+            var scanner = new NetworkDriveScanner();
+
+            try
+            {
+                string rootWithSlash = rootPath.EndsWith("\\") ? rootPath : rootPath + "\\";
+                var progress = new Progress<NetworkScanProgress>(p =>
+                {
+                    RaiseProgress(
+                        $"{rootPath} スキャン中... {p.EntriesFound:N0} 件",
+                        _index.TotalCount,
+                        IndexingState.Indexing);
+                });
+
+                var entries = scanner.ScanDrive(rootWithSlash, driveIndex, excludePatterns, ct, progress);
+                _index.AddEntries(driveIndex, entries);
+
+                RaiseProgress(
+                    $"{rootPath} 完了 ({entries.Count:N0} 件)",
+                    _index.TotalCount,
+                    IndexingState.Indexing);
+            }
+            catch (Exception ex)
+            {
+                RaiseProgress(
+                    $"{rootPath} エラー: {ex.Message}",
+                    _index.TotalCount,
+                    IndexingState.Indexing);
             }
         }
 

@@ -100,6 +100,102 @@ namespace TNDexplorer.Core
         private static extern int WNetGetConnection(string lpLocalName,
             System.Text.StringBuilder lpRemoteName, ref int lpnLength);
 
+        // APIs for running child process as the non-elevated (linked) user token
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool OpenProcessToken(IntPtr ProcessHandle,
+            uint DesiredAccess, out IntPtr TokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool GetTokenInformation(IntPtr TokenHandle,
+            int TokenInformationClass, out IntPtr TokenInformation,
+            int TokenInformationLength, out int ReturnLength);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool DuplicateTokenEx(IntPtr hExistingToken,
+            uint dwDesiredAccess, IntPtr lpTokenAttributes,
+            int ImpersonationLevel, int TokenType, out IntPtr phNewToken);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool CreateProcessAsUser(
+            IntPtr hToken,
+            string lpApplicationName,
+            string lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            bool bInheritHandles,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string lpCurrentDirectory,
+            ref STARTUPINFO lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe,
+            ref SECURITY_ATTRIBUTES lpPipeAttributes, uint nSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetHandleInformation(IntPtr hObject, uint dwMask, uint dwFlags);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool ReadFile(IntPtr hFile, byte[] lpBuffer,
+            uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct STARTUPINFO
+        {
+            public int cb;
+            public string lpReserved;
+            public string lpDesktop;
+            public string lpTitle;
+            public int dwX, dwY, dwXSize, dwYSize;
+            public int dwXCountChars, dwYCountChars;
+            public int dwFillAttribute;
+            public int dwFlags;
+            public short wShowWindow;
+            public short cbReserved2;
+            public IntPtr lpReserved2;
+            public IntPtr hStdInput;
+            public IntPtr hStdOutput;
+            public IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PROCESS_INFORMATION
+        {
+            public IntPtr hProcess;
+            public IntPtr hThread;
+            public int dwProcessId;
+            public int dwThreadId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SECURITY_ATTRIBUTES
+        {
+            public int nLength;
+            public IntPtr lpSecurityDescriptor;
+            public bool bInheritHandle;
+        }
+
+        private const uint TOKEN_QUERY = 0x0008;
+        private const uint TOKEN_DUPLICATE = 0x0002;
+        private const uint TOKEN_ASSIGN_PRIMARY = 0x0001;
+        private const uint MAXIMUM_ALLOWED = 0x02000000;
+        private const int TokenLinkedToken = 19;
+        private const int SecurityImpersonation = 2;
+        private const int TokenPrimary = 1;
+        private const uint CREATE_NO_WINDOW = 0x08000000;
+        private const int STARTF_USESTDHANDLES = 0x00000100;
+        private const uint HANDLE_FLAG_INHERIT = 0x00000001;
+
         public List<NetworkDriveInfo> DetectMappedDrives()
         {
             var drives = new List<NetworkDriveInfo>();
@@ -221,7 +317,7 @@ namespace TNDexplorer.Core
             }
             catch { }
 
-            // Method 5: Parse "net use" output as last resort
+            // Method 5: Parse "net use" output (runs as admin - sees admin session drives)
             try
             {
                 var netUseDrives = ParseNetUseOutput();
@@ -230,6 +326,21 @@ namespace TNDexplorer.Core
                     if (foundLetters.Contains(nud.DriveLetter)) continue;
                     foundLetters.Add(nud.DriveLetter);
                     drives.Add(nud);
+                }
+            }
+            catch { }
+
+            // Method 6: Run "net use" as the non-elevated user (linked token)
+            // This catches drives mapped in the standard user session that are
+            // invisible to the admin-elevated process due to UAC token split.
+            try
+            {
+                var userDrives = ParseNetUseOutputAsUser();
+                foreach (var ud in userDrives)
+                {
+                    if (foundLetters.Contains(ud.DriveLetter)) continue;
+                    foundLetters.Add(ud.DriveLetter);
+                    drives.Add(ud);
                 }
             }
             catch { }
@@ -389,6 +500,169 @@ namespace TNDexplorer.Core
                 }
             }
             catch { }
+
+            return drives;
+        }
+
+        /// <summary>
+        /// Obtains the linked (non-elevated) token from the current admin process,
+        /// then uses CreateProcessAsUser to run "net use" under the standard user token.
+        /// This reveals network drives mapped in the user's standard session that are
+        /// invisible to the admin-elevated token due to Windows UAC token split.
+        /// </summary>
+        private List<NetworkDriveInfo> ParseNetUseOutputAsUser()
+        {
+            var drives = new List<NetworkDriveInfo>();
+            IntPtr processToken = IntPtr.Zero;
+            IntPtr linkedToken = IntPtr.Zero;
+            IntPtr primaryToken = IntPtr.Zero;
+            IntPtr hReadPipe = IntPtr.Zero;
+            IntPtr hWritePipe = IntPtr.Zero;
+
+            try
+            {
+                // Step 1: Open current process token
+                if (!OpenProcessToken(GetCurrentProcess(),
+                    TOKEN_QUERY | TOKEN_DUPLICATE, out processToken))
+                    return drives;
+
+                // Step 2: Get the linked (non-elevated) token
+                int returnLength;
+                if (!GetTokenInformation(processToken, TokenLinkedToken,
+                    out linkedToken, IntPtr.Size, out returnLength))
+                    return drives;
+
+                if (linkedToken == IntPtr.Zero)
+                    return drives;
+
+                // Step 3: Duplicate as primary token (required for CreateProcessAsUser)
+                if (!DuplicateTokenEx(linkedToken, MAXIMUM_ALLOWED, IntPtr.Zero,
+                    SecurityImpersonation, TokenPrimary, out primaryToken))
+                    return drives;
+
+                // Step 4: Create pipe for stdout capture
+                var sa = new SECURITY_ATTRIBUTES
+                {
+                    nLength = Marshal.SizeOf(typeof(SECURITY_ATTRIBUTES)),
+                    bInheritHandle = true,
+                    lpSecurityDescriptor = IntPtr.Zero
+                };
+                if (!CreatePipe(out hReadPipe, out hWritePipe, ref sa, 0))
+                    return drives;
+
+                // Don't let the read end be inherited by the child process
+                SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+
+                // Step 5: Setup STARTUPINFO to redirect stdout
+                var si = new STARTUPINFO();
+                si.cb = Marshal.SizeOf(si);
+                si.dwFlags = STARTF_USESTDHANDLES;
+                si.hStdOutput = hWritePipe;
+                si.hStdError = hWritePipe;
+                si.hStdInput = IntPtr.Zero;
+
+                // Step 6: Create the process as the non-elevated user
+                string sysDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                string cmdLine = $"\"{sysDir}\\net.exe\" use";
+
+                PROCESS_INFORMATION pi;
+                bool created = CreateProcessAsUser(
+                    primaryToken,
+                    null,
+                    cmdLine,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    true,                   // inherit handles (for pipe)
+                    CREATE_NO_WINDOW,
+                    IntPtr.Zero,
+                    null,
+                    ref si,
+                    out pi);
+
+                if (!created)
+                    return drives;
+
+                // Close write end so ReadFile will eventually return 0
+                CloseHandle(hWritePipe);
+                hWritePipe = IntPtr.Zero;
+
+                // Step 7: Read stdout
+                var outputBytes = new List<byte>();
+                byte[] buf = new byte[4096];
+                uint bytesRead;
+                while (ReadFile(hReadPipe, buf, (uint)buf.Length, out bytesRead, IntPtr.Zero)
+                       && bytesRead > 0)
+                {
+                    for (int i = 0; i < bytesRead; i++)
+                        outputBytes.Add(buf[i]);
+                }
+
+                // Wait for the process to finish
+                WaitForSingleObject(pi.hProcess, 10000);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+
+                // Step 8: Parse the output (same logic as ParseNetUseOutput)
+                string output = System.Text.Encoding.GetEncoding(
+                    System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage)
+                    .GetString(outputBytes.ToArray());
+
+                var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.StartsWith("-") || trimmed.StartsWith("新しい")
+                        || trimmed.StartsWith("The command")
+                        || trimmed.StartsWith("Status")
+                        || trimmed.StartsWith("ステータス")
+                        || trimmed.StartsWith("コマンド"))
+                        continue;
+
+                    string driveLetter = null;
+                    string uncPath = null;
+
+                    var parts = trimmed.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var part in parts)
+                    {
+                        if (part.Length == 2 && char.IsLetter(part[0]) && part[1] == ':')
+                            driveLetter = part.ToUpper();
+                        else if (part.StartsWith("\\\\"))
+                            uncPath = part;
+                    }
+
+                    if (driveLetter != null && uncPath != null)
+                    {
+                        long totalSize = 0, freeSpace = 0;
+                        try
+                        {
+                            var di = new DriveInfo(driveLetter);
+                            if (di.IsReady)
+                            {
+                                totalSize = di.TotalSize;
+                                freeSpace = di.TotalFreeSpace;
+                            }
+                        }
+                        catch { }
+
+                        drives.Add(new NetworkDriveInfo
+                        {
+                            DriveLetter = driveLetter,
+                            UncPath = uncPath,
+                            TotalSize = totalSize,
+                            FreeSpace = freeSpace,
+                        });
+                    }
+                }
+            }
+            catch { }
+            finally
+            {
+                if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
+                if (hWritePipe != IntPtr.Zero) CloseHandle(hWritePipe);
+                if (primaryToken != IntPtr.Zero) CloseHandle(primaryToken);
+                if (linkedToken != IntPtr.Zero) CloseHandle(linkedToken);
+                if (processToken != IntPtr.Zero) CloseHandle(processToken);
+            }
 
             return drives;
         }

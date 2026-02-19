@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:converters="clr-namespace:TNDexplorer.Converters"
         Title="設定 - TNDexplorer"
-        Width="600" Height="650"
+        Width="600" Height="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False">
@@ -19,6 +19,24 @@
         </Grid.RowDefinitions>
 
         <TabControl Grid.Row="0">
+            <!-- 全般 タブ -->
+            <TabItem Header="全般" Padding="12,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+                    <StackPanel>
+                        <TextBlock Text="表示"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <StackPanel Margin="5,0,0,15">
+                            <CheckBox IsChecked="{Binding AlternateRowColors}" Margin="0,3"
+                                      Content="交互別色表示"
+                                      ToolTip="検索結果の背景色を1行おきに色分けして表示します"/>
+                            <CheckBox IsChecked="{Binding GroupByFiscalYear}" Margin="0,3"
+                                      Content="年度でグループ化"
+                                      ToolTip="更新日時の年度（4月〜翌3月）ごとにラインを表示します"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ドライブ タブ -->
             <TabItem Header="ドライブ" Padding="12,4">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
@@ -58,6 +76,31 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <!-- Custom Folders -->
+                        <TextBlock Text="フォルダ"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <TextBlock Text="手動で走査対象のフォルダを追加できます。" FontSize="11"
+                                   Foreground="Gray" Margin="0,0,0,5"/>
+                        <ItemsControl ItemsSource="{Binding CustomFolders}" Margin="0,0,0,5">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
+                                        <TextBlock Text="{Binding FolderPath}" ToolTip="{Binding FolderPath}"/>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <Button Content="追加" Padding="12,4" FontSize="12"
+                                    Click="OnAddCustomFolder"
+                                    Background="#FF0078D4" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"/>
+                            <Button Content="選択した項目を削除" Padding="12,4" FontSize="12"
+                                    Click="OnRemoveCustomFolder" Margin="8,0,0,0"
+                                    Background="#FFDC3545" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"/>
+                        </StackPanel>
 
                         <!-- Search Settings -->
                         <TextBlock Text="検索設定"

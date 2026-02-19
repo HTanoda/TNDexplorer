@@ -152,6 +152,28 @@ namespace TNDexplorer.Core
         private static HashSet<Guid> _registeredHandlers;
 
         /// <summary>
+        /// Returns true if the file has a Zone.Identifier ADS indicating
+        /// it was downloaded from the Internet (ZoneId=3 or 4).
+        /// </summary>
+        public static bool HasZoneIdentifier(string filePath)
+        {
+            try
+            {
+                // File.Exists() does not work reliably with NTFS ADS paths.
+                // Open the Zone.Identifier ADS directly with FileStream.
+                string zoneFile = filePath + ":Zone.Identifier";
+                using (var fs = new FileStream(zoneFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var reader = new StreamReader(fs))
+                {
+                    string content = reader.ReadToEnd();
+                    return content.Contains("ZoneId=3") || content.Contains("ZoneId=4");
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
         /// Returns true if the given file extension is a PDF.
         /// </summary>
         public static bool IsPdfFile(string filePath)

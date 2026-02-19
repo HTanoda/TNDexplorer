@@ -14,6 +14,24 @@ namespace TNDexplorer.ViewModels
         public string Keyword { get; set; }
     }
 
+    public class CustomFolderItem : ViewModelBase
+    {
+        private bool _isSelected = true;
+        private string _folderPath;
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set => SetProperty(ref _isSelected, value);
+        }
+
+        public string FolderPath
+        {
+            get => _folderPath;
+            set => SetProperty(ref _folderPath, value);
+        }
+    }
+
     public class SettingsViewModel : ViewModelBase
     {
         private readonly SettingsService _settingsService;
@@ -25,6 +43,10 @@ namespace TNDexplorer.ViewModels
         private string _excludePatternsText;
         private bool _excludeHiddenFiles;
         private bool _excludeSystemFiles;
+
+        // Display settings
+        private bool _alternateRowColors;
+        private bool _groupByFiscalYear;
 
         // New favorite fields
         private string _newSettingsFavName = "";
@@ -45,6 +67,9 @@ namespace TNDexplorer.ViewModels
 
         public ObservableCollection<SettingsFavoriteItem> SettingsFavorites { get; }
             = new ObservableCollection<SettingsFavoriteItem>();
+
+        public ObservableCollection<CustomFolderItem> CustomFolders { get; }
+            = new ObservableCollection<CustomFolderItem>();
 
         public int MaxSearchResults
         {
@@ -112,6 +137,18 @@ namespace TNDexplorer.ViewModels
             private set => SetProperty(ref _favRegisterButtonText, value);
         }
 
+        public bool AlternateRowColors
+        {
+            get => _alternateRowColors;
+            set => SetProperty(ref _alternateRowColors, value);
+        }
+
+        public bool GroupByFiscalYear
+        {
+            get => _groupByFiscalYear;
+            set => SetProperty(ref _groupByFiscalYear, value);
+        }
+
         public bool HasNetworkDrives => NetworkDrives.Count > 0;
 
         public RelayCommand RefreshDrivesCommand { get; }
@@ -136,9 +173,52 @@ namespace TNDexplorer.ViewModels
             ExcludeHiddenFiles = _settings.ExcludeHiddenFiles;
             ExcludeSystemFiles = _settings.ExcludeSystemFiles;
             ExcludePatternsText = string.Join("\n", _settings.ExcludePatterns ?? Enumerable.Empty<string>());
+            AlternateRowColors = _settings.AlternateRowColors;
+            GroupByFiscalYear = _settings.GroupByFiscalYear;
 
             RefreshDrives();
             LoadFavorites();
+            LoadCustomFolders();
+        }
+
+        private void LoadCustomFolders()
+        {
+            CustomFolders.Clear();
+            if (_settings.CustomFolders != null)
+            {
+                foreach (var f in _settings.CustomFolders)
+                {
+                    CustomFolders.Add(new CustomFolderItem
+                    {
+                        FolderPath = f.FolderPath,
+                        IsSelected = f.Enabled,
+                    });
+                }
+            }
+        }
+
+        public void AddCustomFolder(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath)) return;
+            // Avoid duplicates
+            foreach (var existing in CustomFolders)
+            {
+                if (string.Equals(existing.FolderPath, folderPath, System.StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            CustomFolders.Add(new CustomFolderItem
+            {
+                FolderPath = folderPath,
+                IsSelected = true,
+            });
+        }
+
+        public void RemoveCustomFolders(System.Collections.Generic.IList<CustomFolderItem> items)
+        {
+            foreach (var item in items)
+            {
+                CustomFolders.Remove(item);
+            }
         }
 
         private void LoadFavorites()
@@ -330,6 +410,17 @@ namespace TNDexplorer.ViewModels
                 FolderPath = f.FolderPath,
                 Keyword = f.Keyword,
             }).ToList();
+
+            // Save custom folders
+            _settings.CustomFolders = CustomFolders.Select(f => new CustomFolderSettings
+            {
+                FolderPath = f.FolderPath,
+                Enabled = f.IsSelected,
+            }).ToList();
+
+            // Save display settings
+            _settings.AlternateRowColors = AlternateRowColors;
+            _settings.GroupByFiscalYear = GroupByFiscalYear;
 
             _settings.IsFirstRun = false;
             _settingsService.Save(_settings);

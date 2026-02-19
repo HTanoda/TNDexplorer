@@ -85,14 +85,58 @@ namespace TNDexplorer.Views
             var vm = DataContext as SettingsViewModel;
             if (vm == null) return;
 
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
+            var dialog = new FolderBrowseDialog
             {
-                dialog.Description = "フォルダを選択";
-                dialog.ShowNewFolderButton = false;
-                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
-                    vm.NewSettingsFavFolder = dialog.SelectedPath;
-                }
+                Owner = this,
+                Description = "フォルダを選択",
+                SelectedPath = vm.NewSettingsFavFolder ?? ""
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                vm.NewSettingsFavFolder = dialog.SelectedPath;
+            }
+        }
+
+        private void OnAddCustomFolder(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsViewModel;
+            if (vm == null) return;
+
+            var dialog = new FolderBrowseDialog
+            {
+                Owner = this,
+                Description = "走査対象フォルダを選択"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                vm.AddCustomFolder(dialog.SelectedPath);
+            }
+        }
+
+        private void OnRemoveCustomFolder(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsViewModel;
+            if (vm == null) return;
+
+            var selectedItems = vm.CustomFolders.Where(f => f.IsSelected).ToList();
+            if (selectedItems.Count == 0)
+            {
+                // If none checked, remove all unchecked (interpretation: remove selected via checkbox)
+                // Better: show message
+                MessageBox.Show("削除するフォルダのチェックを外して選択してください。", "フォルダ",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"選択した {selectedItems.Count} 件のフォルダを削除しますか？",
+                "フォルダの削除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                vm.RemoveCustomFolders(selectedItems);
             }
         }
     }

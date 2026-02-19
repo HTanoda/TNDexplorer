@@ -177,9 +177,26 @@ namespace TNDexplorer.Views
             }
             else
             {
-                PreviewPlaceholder.Text = string.IsNullOrEmpty(previewError)
-                    ? "このファイル形式はプレビューできません"
-                    : $"プレビューに失敗しました\n{previewError}";
+                // E_FAIL (0x80004005) is typically caused by Zone Identifier security block.
+                // HasZoneIdentifier may fail under elevated admin token, so for E_FAIL
+                // always show the security block guidance regardless of ADS detection result.
+                bool isEFail = !string.IsNullOrEmpty(previewError)
+                    && previewError.IndexOf("80004005", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isEFail)
+                {
+                    PreviewPlaceholder.Text =
+                        "このファイルはセキュリティブロックされている\n"
+                        + "可能性があります。\n\n"
+                        + "ファイルのプロパティ → 全般タブ →\n"
+                        + "「許可する」にチェックを入れてから\n"
+                        + "再度お試しください。";
+                }
+                else
+                {
+                    PreviewPlaceholder.Text = string.IsNullOrEmpty(previewError)
+                        ? "このファイル形式はプレビューできません"
+                        : $"プレビューに失敗しました\n{previewError}";
+                }
                 PreviewPlaceholder.Visibility = Visibility.Visible;
             }
         }

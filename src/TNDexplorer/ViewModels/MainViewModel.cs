@@ -72,6 +72,10 @@ namespace TNDexplorer.ViewModels
         private string _newFavoriteName = "";
         private string _favoriteSaveStatus = "";
 
+        // Display settings
+        private bool _alternateRowColors;
+        private bool _groupByFiscalYear;
+
         private DispatcherTimer _debounceTimer;
         private DispatcherTimer _favStatusTimer;
 
@@ -303,10 +307,24 @@ namespace TNDexplorer.ViewModels
             private set => SetProperty(ref _favoriteSaveStatus, value);
         }
 
+        // Display settings
+        public bool AlternateRowColors
+        {
+            get => _alternateRowColors;
+            set => SetProperty(ref _alternateRowColors, value);
+        }
+
+        public bool GroupByFiscalYear
+        {
+            get => _groupByFiscalYear;
+            set => SetProperty(ref _groupByFiscalYear, value);
+        }
+
         // Commands
         public RelayCommand OpenFileCommand { get; }
         public RelayCommand OpenFolderCommand { get; }
         public RelayCommand CopyPathCommand { get; }
+        public RelayCommand CopyFileCommand { get; }
         public RelayCommand ShowPropertiesCommand { get; }
         public RelayCommand OpenSettingsCommand { get; }
         public RelayCommand ClearSearchCommand { get; }
@@ -333,6 +351,7 @@ namespace TNDexplorer.ViewModels
             OpenFileCommand = new RelayCommand(ExecuteOpenFile, () => SelectedResult != null);
             OpenFolderCommand = new RelayCommand(ExecuteOpenFolder, () => SelectedResult != null);
             CopyPathCommand = new RelayCommand(ExecuteCopyPath, () => SelectedResult != null);
+            CopyFileCommand = new RelayCommand(ExecuteCopyFile, () => SelectedResult != null);
             ShowPropertiesCommand = new RelayCommand(ExecuteShowProperties, () => SelectedResult != null);
             OpenSettingsCommand = new RelayCommand(() => RequestOpenSettings?.Invoke());
             ClearSearchCommand = new RelayCommand(() => SearchText = "");
@@ -368,6 +387,10 @@ namespace TNDexplorer.ViewModels
 
             // Load favorite filters
             LoadFavorites();
+
+            // Load display settings
+            AlternateRowColors = settings.AlternateRowColors;
+            GroupByFiscalYear = settings.GroupByFiscalYear;
         }
 
         private void LoadFavorites()
@@ -468,14 +491,15 @@ namespace TNDexplorer.ViewModels
 
         private void BrowseFolder()
         {
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
+            var dialog = new Views.FolderBrowseDialog
             {
-                dialog.Description = "検索対象フォルダを選択";
-                dialog.ShowNewFolderButton = false;
-                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
-                    FolderPath = dialog.SelectedPath;
-                }
+                Owner = System.Windows.Application.Current.MainWindow,
+                Description = "検索対象フォルダを選択",
+                SelectedPath = FolderPath ?? ""
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                FolderPath = dialog.SelectedPath;
             }
         }
 
@@ -557,6 +581,13 @@ namespace TNDexplorer.ViewModels
 
                 if (!ct.IsCancellationRequested)
                 {
+                    // Sort by Modified descending and mark fiscal year boundaries
+                    if (_groupByFiscalYear && results.Count > 0)
+                    {
+                        results.Sort((a, b) => b.Modified.CompareTo(a.Modified));
+                        MarkFiscalYearBoundaries(results);
+                    }
+
                     _dispatcher.Invoke(() =>
                     {
                         Results = results;
@@ -577,6 +608,32 @@ namespace TNDexplorer.ViewModels
                 IsIndexing = e.State == IndexingState.Indexing;
                 UpdateStatusText();
             }));
+        }
+
+        private void MarkFiscalYearBoundaries(IReadOnlyList<FileResultItem> items)
+        {
+            if (items.Count == 0) return;
+
+            // First item always gets a label
+            int prevFY = items[0].FiscalYear;
+            items[0].IsFiscalYearBoundary = true;
+            items[0].FiscalYearLabel = $"{prevFY}年度";
+
+            for (int i = 1; i < items.Count; i++)
+            {
+                int fy = items[i].FiscalYear;
+                if (fy != prevFY)
+                {
+                    items[i].IsFiscalYearBoundary = true;
+                    items[i].FiscalYearLabel = $"{fy}年度";
+                    prevFY = fy;
+                }
+                else
+                {
+                    items[i].IsFiscalYearBoundary = false;
+                    items[i].FiscalYearLabel = null;
+                }
+            }
         }
 
         private void UpdateStatusText()
@@ -610,6 +667,12 @@ namespace TNDexplorer.ViewModels
             _fileOps.CopyPathToClipboard(SelectedResult.FullPath);
         }
 
+        private void ExecuteCopyFile()
+        {
+            if (SelectedResult == null) return;
+            _fileOps.CopyFileToClipboard(SelectedResult.FullPath);
+        }
+
         private void ExecuteShowProperties()
         {
             if (SelectedResult == null) return;
@@ -627,6 +690,10 @@ namespace TNDexplorer.ViewModels
             _settings.FavoriteFilters = settings.FavoriteFilters;
             _settings.ExcludeHiddenFiles = settings.ExcludeHiddenFiles;
             _settings.ExcludeSystemFiles = settings.ExcludeSystemFiles;
+            _settings.AlternateRowColors = settings.AlternateRowColors;
+            _settings.GroupByFiscalYear = settings.GroupByFiscalYear;
+            AlternateRowColors = settings.AlternateRowColors;
+            GroupByFiscalYear = settings.GroupByFiscalYear;
             LoadFavorites();
         }
 

@@ -6,6 +6,26 @@ namespace TNDexplorer.Models
     [DataContract]
     public class AppSettings
     {
+        /// <summary>
+        /// Called before deserialization to set default values for newly added properties.
+        /// DataContractSerializer ignores property initializers for fields not present in the data.
+        /// </summary>
+        [OnDeserializing]
+        private void SetDefaults(StreamingContext context)
+        {
+            ContentSearchIncludeFilename = true;
+            MaxSearchResults = 100000;
+            NetworkRescanIntervalMinutes = 5;
+            ExcludeHiddenFiles = true;
+            ExcludeSystemFiles = true;
+            IsFirstRun = true;
+            WindowWidth = 900;
+            WindowHeight = 600;
+            WindowLeft = -1;
+            WindowTop = -1;
+            FullTextMaxFileSizeMB = 50;
+        }
+
         [DataMember]
         public List<DriveSettings> LocalDrives { get; set; } = new List<DriveSettings>();
 

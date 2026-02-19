@@ -811,6 +811,7 @@ namespace TNDexplorer.ViewModels
             // Update content search settings
             _settings.FullTextTargetExtensions = settings.FullTextTargetExtensions;
             _settings.FullTextMaxFileSizeMB = settings.FullTextMaxFileSizeMB;
+            _settings.ContentSearchIncludeFilename = settings.ContentSearchIncludeFilename;
         }
 
         public void Dispose()

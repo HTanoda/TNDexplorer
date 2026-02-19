@@ -169,36 +169,118 @@ namespace TNDexplorer.Core
 
         /// <summary>
         /// Read plain text file content directly (for known text formats).
-        /// Auto-detects encoding.
+        /// Auto-detects encoding (BOM → UTF-8 → Shift-JIS fallback).
         /// </summary>
         private string ExtractPlainText(string filePath, int maxTextLength)
         {
             try
             {
                 using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (var reader = new StreamReader(fs, Encoding.Default, detectEncodingFromByteOrderMarks: true))
                 {
-                    char[] buffer = new char[Math.Min(maxTextLength, 64 * 1024)];
-                    var sb = new StringBuilder();
+                    // Detect encoding from BOM or heuristics
+                    var encoding = DetectEncoding(fs);
+                    fs.Position = 0;
 
-                    int read;
-                    while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    using (var reader = new StreamReader(fs, encoding, detectEncodingFromByteOrderMarks: true))
                     {
-                        sb.Append(buffer, 0, read);
-                        if (sb.Length >= maxTextLength)
-                        {
-                            sb.Length = maxTextLength;
-                            break;
-                        }
-                    }
+                        char[] buffer = new char[Math.Min(maxTextLength, 64 * 1024)];
+                        var sb = new StringBuilder();
 
-                    return sb.Length > 0 ? sb.ToString() : null;
+                        int read;
+                        while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            sb.Append(buffer, 0, read);
+                            if (sb.Length >= maxTextLength)
+                            {
+                                sb.Length = maxTextLength;
+                                break;
+                            }
+                        }
+
+                        return sb.Length > 0 ? sb.ToString() : null;
+                    }
                 }
             }
             catch
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Detect file encoding by checking BOM and content heuristics.
+        /// Falls back to Shift-JIS (932) for Japanese Windows environments.
+        /// </summary>
+        private static Encoding DetectEncoding(FileStream fs)
+        {
+            // Read first bytes for BOM detection
+            byte[] bom = new byte[4];
+            int bytesRead = fs.Read(bom, 0, 4);
+
+            if (bytesRead >= 3 && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF)
+                return Encoding.UTF8;
+            if (bytesRead >= 2 && bom[0] == 0xFF && bom[1] == 0xFE)
+                return Encoding.Unicode; // UTF-16 LE
+            if (bytesRead >= 2 && bom[0] == 0xFE && bom[1] == 0xFF)
+                return Encoding.BigEndianUnicode; // UTF-16 BE
+            if (bytesRead >= 4 && bom[0] == 0 && bom[1] == 0 && bom[2] == 0xFE && bom[3] == 0xFF)
+                return Encoding.GetEncoding(12001); // UTF-32 BE
+
+            // No BOM: heuristic detection
+            // Read up to 8KB for analysis
+            fs.Position = 0;
+            int sampleSize = (int)Math.Min(fs.Length, 8192);
+            byte[] sample = new byte[sampleSize];
+            fs.Read(sample, 0, sampleSize);
+
+            // Check if content is valid UTF-8
+            if (IsValidUtf8(sample, sampleSize))
+                return new UTF8Encoding(false); // UTF-8 without BOM
+
+            // Fallback to system default (Shift-JIS on Japanese Windows)
+            return Encoding.Default;
+        }
+
+        /// <summary>
+        /// Checks if byte sequence is valid UTF-8.
+        /// Returns true if the content contains multi-byte UTF-8 sequences
+        /// (indicating non-ASCII content that was intentionally encoded as UTF-8),
+        /// or if all bytes are ASCII (compatible with both UTF-8 and Shift-JIS).
+        /// </summary>
+        private static bool IsValidUtf8(byte[] data, int length)
+        {
+            int i = 0;
+
+            while (i < length)
+            {
+                byte b = data[i];
+
+                if (b <= 0x7F)
+                {
+                    // ASCII
+                    i++;
+                    continue;
+                }
+
+                int expectedBytes;
+                if ((b & 0xE0) == 0xC0) expectedBytes = 2;
+                else if ((b & 0xF0) == 0xE0) expectedBytes = 3;
+                else if ((b & 0xF8) == 0xF0) expectedBytes = 4;
+                else return false; // Invalid UTF-8 lead byte
+
+                if (i + expectedBytes > length) return false;
+
+                for (int j = 1; j < expectedBytes; j++)
+                {
+                    if ((data[i + j] & 0xC0) != 0x80) return false;
+                }
+
+                i += expectedBytes;
+            }
+
+            // Only report as UTF-8 if we found multi-byte sequences
+            // (pure ASCII is ambiguous, default to UTF-8 as it's most common now)
+            return true;
         }
 
         /// <summary>

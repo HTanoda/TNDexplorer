@@ -200,9 +200,25 @@ namespace TNDexplorer.Core
                         CancellationToken = ct,
                     };
 
+                    // Separate plain text files from IFilter files
+                    // IFilter COM requires STA thread, so process them separately
+                    var plainTextFiles = new List<ContentSearchTarget>();
+                    var ifilterFiles = new List<ContentSearchTarget>();
+
+                    foreach (var file in targetFiles)
+                    {
+                        int dotIdx = file.Name.LastIndexOf('.');
+                        string ext = dotIdx >= 0 ? file.Name.Substring(dotIdx) : "";
+                        if (TextExtractor.IsPlainTextExtension(ext))
+                            plainTextFiles.Add(file);
+                        else
+                            ifilterFiles.Add(file);
+                    }
+
+                    // Process plain text files in parallel (no COM dependency)
                     try
                     {
-                        Parallel.ForEach(targetFiles, options, (file, loopState) =>
+                        Parallel.ForEach(plainTextFiles, options, (file, loopState) =>
                         {
                             if (ct.IsCancellationRequested || results.Count >= maxResults)
                             {
@@ -210,47 +226,33 @@ namespace TNDexplorer.Core
                                 return;
                             }
 
-                            try
-                            {
-                                // Extract text content
-                                string content = extractor.ExtractText(file.FullPath);
-                                if (string.IsNullOrEmpty(content))
-                                {
-                                    Interlocked.Increment(ref scannedCount);
-                                    ReportProgress(progress, scannedCount, totalFiles, matchedCount);
-                                    return;
-                                }
-
-                                // Search for query in content
-                                int matchIndex = content.IndexOf(query, comparison);
-                                if (matchIndex >= 0)
-                                {
-                                    string snippet = GenerateSnippet(content, query, matchIndex);
-                                    int matched = Interlocked.Increment(ref matchedCount);
-
-                                    if (matched <= maxResults)
-                                    {
-                                        results.Add(new FileResultItem
-                                        {
-                                            Name = file.Name,
-                                            Path = file.DirPath,
-                                            FullPath = file.FullPath,
-                                            Size = file.Size,
-                                            Modified = file.Modified,
-                                            IsDirectory = false,
-                                            ContentSnippet = snippet,
-                                        });
-                                    }
-                                }
-                            }
-                            catch { }
-
-                            Interlocked.Increment(ref scannedCount);
-                            if (scannedCount % 50 == 0 || scannedCount == totalFiles)
-                                ReportProgress(progress, scannedCount, totalFiles, matchedCount);
+                            SearchFileContent(file, extractor, query, comparison,
+                                maxResults, results, ref scannedCount, ref matchedCount,
+                                totalFiles, progress);
                         });
                     }
                     catch (OperationCanceledException) { }
+
+                    // Process IFilter files on a dedicated STA thread (COM requirement)
+                    if (ifilterFiles.Count > 0 && !ct.IsCancellationRequested && results.Count < maxResults)
+                    {
+                        var staThread = new Thread(() =>
+                        {
+                            foreach (var file in ifilterFiles)
+                            {
+                                if (ct.IsCancellationRequested || results.Count >= maxResults)
+                                    break;
+
+                                SearchFileContent(file, extractor, query, comparison,
+                                    maxResults, results, ref scannedCount, ref matchedCount,
+                                    totalFiles, progress);
+                            }
+                        });
+                        staThread.SetApartmentState(ApartmentState.STA);
+                        staThread.IsBackground = true;
+                        staThread.Start();
+                        staThread.Join();
+                    }
 
                     // Final progress report
                     ReportProgress(progress, scannedCount, totalFiles, matchedCount);
@@ -379,6 +381,56 @@ namespace TNDexplorer.Core
                 TotalFiles = total,
                 MatchedFiles = matched,
             });
+        }
+
+        /// <summary>
+        /// Search for query in a single file's content.
+        /// Thread-safe: uses Interlocked for counters and ConcurrentBag for results.
+        /// </summary>
+        private static void SearchFileContent(
+            ContentSearchTarget file,
+            TextExtractor extractor,
+            string query,
+            StringComparison comparison,
+            int maxResults,
+            ConcurrentBag<FileResultItem> results,
+            ref int scannedCount,
+            ref int matchedCount,
+            int totalFiles,
+            IProgress<ContentSearchProgress> progress)
+        {
+            try
+            {
+                string content = extractor.ExtractText(file.FullPath);
+                if (!string.IsNullOrEmpty(content))
+                {
+                    int matchIndex = content.IndexOf(query, comparison);
+                    if (matchIndex >= 0)
+                    {
+                        string snippet = GenerateSnippet(content, query, matchIndex);
+                        int matched = Interlocked.Increment(ref matchedCount);
+
+                        if (matched <= maxResults)
+                        {
+                            results.Add(new FileResultItem
+                            {
+                                Name = file.Name,
+                                Path = file.DirPath,
+                                FullPath = file.FullPath,
+                                Size = file.Size,
+                                Modified = file.Modified,
+                                IsDirectory = false,
+                                ContentSnippet = snippet,
+                            });
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            int sc = Interlocked.Increment(ref scannedCount);
+            if (sc % 50 == 0 || sc == totalFiles)
+                ReportProgress(progress, sc, totalFiles, matchedCount);
         }
 
         private class ContentSearchTarget

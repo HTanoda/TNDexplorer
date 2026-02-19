@@ -250,7 +250,7 @@
                         <TextBlock Text="内容検索（grep方式）"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
                         <TextBlock FontSize="12" Foreground="#FF333333" Margin="5,0,0,12" TextWrapping="Wrap"
-                                   Text="検索実行時にファイル内容を直接読み取ります。フォルダ範囲を絞ることで高速に検索できます。事前のインデックス構築は不要です。"/>
+                                   Text="検索実行時にファイル内容を直接読み取ります。"/>
 
                         <!-- Target Extensions -->
                         <TextBlock Text="対象拡張子"

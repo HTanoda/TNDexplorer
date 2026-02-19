@@ -58,6 +58,7 @@ namespace TNDexplorer.ViewModels
         // Content search settings
         private string _fullTextTargetExtensionsText;
         private long _fullTextMaxFileSizeMB;
+        private bool _contentSearchIncludeFilename;
 
         // New favorite fields
         private string _newSettingsFavName = "";
@@ -172,6 +173,12 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _fullTextMaxFileSizeMB, value);
         }
 
+        public bool ContentSearchIncludeFilename
+        {
+            get => _contentSearchIncludeFilename;
+            set => SetProperty(ref _contentSearchIncludeFilename, value);
+        }
+
         public bool HasNetworkDrives => NetworkDrives.Count > 0;
 
         public RelayCommand RefreshDrivesCommand { get; }
@@ -201,6 +208,7 @@ namespace TNDexplorer.ViewModels
 
             // Content search settings
             FullTextMaxFileSizeMB = _settings.FullTextMaxFileSizeMB;
+            ContentSearchIncludeFilename = _settings.ContentSearchIncludeFilename;
             var ftsExts = _settings.FullTextTargetExtensions;
             if (ftsExts == null || ftsExts.Count == 0)
                 ftsExts = new System.Collections.Generic.List<string>(DefaultContentSearchExtensions);
@@ -454,6 +462,7 @@ namespace TNDexplorer.ViewModels
 
             // Save content search settings
             _settings.FullTextMaxFileSizeMB = FullTextMaxFileSizeMB;
+            _settings.ContentSearchIncludeFilename = ContentSearchIncludeFilename;
             _settings.FullTextTargetExtensions = (FullTextTargetExtensionsText ?? "")
                 .Split(new[] { ';', ',', '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())

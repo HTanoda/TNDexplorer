@@ -652,6 +652,28 @@ namespace TNDexplorer.ViewModels
                         _settings.FullTextTargetExtensions)
                         .ConfigureAwait(false);
 
+                    // Optionally also search by filename and merge results
+                    if (_settings.ContentSearchIncludeFilename && !ct.IsCancellationRequested)
+                    {
+                        var filenameResults = await _indexManager.SearchEngine.SearchAsync(
+                            query, _currentFilter, _settings.MaxSearchResults, ct, advOptions)
+                            .ConfigureAwait(false);
+
+                        // Merge: add filename results that aren't already in content results
+                        if (filenameResults.Count > 0)
+                        {
+                            var existingPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var r in results)
+                                existingPaths.Add(r.FullPath);
+
+                            foreach (var r in filenameResults)
+                            {
+                                if (!existingPaths.Contains(r.FullPath) && results.Count < _settings.MaxSearchResults)
+                                    results.Add(r);
+                            }
+                        }
+                    }
+
                     _dispatcher.BeginInvoke(new Action(() =>
                     {
                         FullTextStatus = $"内容検索完了: {results.Count:N0} 件ヒット";

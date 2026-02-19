@@ -61,6 +61,9 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public long FullTextMaxFileSizeMB { get; set; } = 50;
+
+        [DataMember]
+        public bool ContentSearchIncludeFilename { get; set; } = true;
     }
 
     [DataContract]

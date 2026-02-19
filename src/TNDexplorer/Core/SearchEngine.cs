@@ -441,13 +441,30 @@ namespace TNDexplorer.Core
 
                         if (matched <= maxResults)
                         {
+                            // Retrieve file size/date from filesystem if not set
+                            long size = file.Size;
+                            DateTime modified = file.Modified;
+                            if (modified == default(DateTime) || size == 0)
+                            {
+                                try
+                                {
+                                    var fi = new FileInfo(file.FullPath);
+                                    if (fi.Exists)
+                                    {
+                                        if (size == 0) size = fi.Length;
+                                        if (modified == default(DateTime)) modified = fi.LastWriteTime;
+                                    }
+                                }
+                                catch { }
+                            }
+
                             results.Add(new FileResultItem
                             {
                                 Name = file.Name,
                                 Path = file.DirPath,
                                 FullPath = file.FullPath,
-                                Size = file.Size,
-                                Modified = file.Modified,
+                                Size = size,
+                                Modified = modified,
                                 IsDirectory = false,
                                 ContentSnippet = snippet,
                             });

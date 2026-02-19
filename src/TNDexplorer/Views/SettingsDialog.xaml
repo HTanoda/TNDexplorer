@@ -274,6 +274,14 @@
                                        FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
                         </StackPanel>
 
+                        <!-- Include filename search -->
+                        <TextBlock Text="検索オプション"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,12,0,5"/>
+                        <CheckBox IsChecked="{Binding ContentSearchIncludeFilename}"
+                                  Content="ファイル名も検索対象に含める"
+                                  FontSize="12" Margin="5,0,0,0"
+                                  ToolTip="ONの場合、内容検索時にファイル名の検索結果も合わせて表示します"/>
+
                         <!-- Notes -->
                         <TextBlock FontSize="11" Foreground="Gray" Margin="0,15,0,0" TextWrapping="Wrap">
                             <Run Text="使い方:"/>
@@ -289,9 +297,9 @@
                             <LineBreak/>
                             <Run Text="・フォルダ指定は必須です（全ドライブ検索は非対応）"/>
                             <LineBreak/>
-                            <Run Text="・Office文書 (.docx/.xlsx/.pptx) はOfficeインストール環境でのみ対応"/>
+                            <Run Text="・Office文書 (.docx/.xlsx/.pptx) は自動抽出対応（Office不要）"/>
                             <LineBreak/>
-                            <Run Text="・PDF文書は Windows Search / Adobe Reader がインストールされている環境で対応"/>
+                            <Run Text="・PDF文書は自動抽出対応（Adobe Reader不要）"/>
                         </TextBlock>
                     </StackPanel>
                 </ScrollViewer>

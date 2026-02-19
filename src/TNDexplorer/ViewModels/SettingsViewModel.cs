@@ -35,6 +35,12 @@ namespace TNDexplorer.ViewModels
 
     public class SettingsViewModel : ViewModelBase
     {
+        private static readonly string[] DefaultContentSearchExtensions = new[]
+        {
+            ".txt", ".csv", ".tsv", ".log", ".md", ".json", ".xml", ".html", ".htm",
+            ".doc", ".xls", ".ppt", ".docx", ".xlsx", ".pptx", ".pdf", ".rtf",
+        };
+
         private readonly SettingsService _settingsService;
         private readonly NetworkDriveDetector _detector;
         private AppSettings _settings;
@@ -49,11 +55,9 @@ namespace TNDexplorer.ViewModels
         private bool _alternateRowColors;
         private bool _groupByFiscalYear;
 
-        // Full-text search settings
-        private bool _fullTextSearchEnabled;
+        // Content search settings
         private string _fullTextTargetExtensionsText;
         private long _fullTextMaxFileSizeMB;
-        private string _fullTextIndexStatus;
 
         // New favorite fields
         private string _newSettingsFavName = "";
@@ -156,12 +160,6 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _groupByFiscalYear, value);
         }
 
-        public bool FullTextSearchEnabled
-        {
-            get => _fullTextSearchEnabled;
-            set => SetProperty(ref _fullTextSearchEnabled, value);
-        }
-
         public string FullTextTargetExtensionsText
         {
             get => _fullTextTargetExtensionsText;
@@ -174,18 +172,10 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _fullTextMaxFileSizeMB, value);
         }
 
-        public string FullTextIndexStatus
-        {
-            get => _fullTextIndexStatus;
-            private set => SetProperty(ref _fullTextIndexStatus, value);
-        }
-
         public bool HasNetworkDrives => NetworkDrives.Count > 0;
 
         public RelayCommand RefreshDrivesCommand { get; }
         public RelayCommand SaveCommand { get; }
-        public RelayCommand RebuildFullTextIndexCommand { get; }
-        public RelayCommand DeleteFullTextIndexCommand { get; }
 
         public SettingsViewModel(SettingsService settingsService)
         {
@@ -194,8 +184,6 @@ namespace TNDexplorer.ViewModels
 
             RefreshDrivesCommand = new RelayCommand(RefreshDrives);
             SaveCommand = new RelayCommand(Save);
-            RebuildFullTextIndexCommand = new RelayCommand(RebuildFullTextIndex);
-            DeleteFullTextIndexCommand = new RelayCommand(DeleteFullTextIndex);
 
             LoadSettings();
         }
@@ -211,14 +199,12 @@ namespace TNDexplorer.ViewModels
             AlternateRowColors = _settings.AlternateRowColors;
             GroupByFiscalYear = _settings.GroupByFiscalYear;
 
-            // Full-text search settings
-            FullTextSearchEnabled = _settings.FullTextSearchEnabled;
+            // Content search settings
             FullTextMaxFileSizeMB = _settings.FullTextMaxFileSizeMB;
             var ftsExts = _settings.FullTextTargetExtensions;
             if (ftsExts == null || ftsExts.Count == 0)
-                ftsExts = new System.Collections.Generic.List<string>(FullTextCrawler.DefaultTargetExtensions);
+                ftsExts = new System.Collections.Generic.List<string>(DefaultContentSearchExtensions);
             FullTextTargetExtensionsText = string.Join("; ", ftsExts);
-            UpdateFullTextIndexStatus();
 
             RefreshDrives();
             LoadFavorites();
@@ -466,8 +452,7 @@ namespace TNDexplorer.ViewModels
             _settings.AlternateRowColors = AlternateRowColors;
             _settings.GroupByFiscalYear = GroupByFiscalYear;
 
-            // Save full-text search settings
-            _settings.FullTextSearchEnabled = FullTextSearchEnabled;
+            // Save content search settings
             _settings.FullTextMaxFileSizeMB = FullTextMaxFileSizeMB;
             _settings.FullTextTargetExtensions = (FullTextTargetExtensionsText ?? "")
                 .Split(new[] { ';', ',', '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
@@ -485,108 +470,5 @@ namespace TNDexplorer.ViewModels
             return _settings;
         }
 
-        private void UpdateFullTextIndexStatus()
-        {
-            try
-            {
-                // Use static method to avoid creating/initializing the full FTS database
-                var stats = FullTextIndex.GetIndexStatistics();
-                if (stats == null)
-                {
-                    FullTextIndexStatus = "インデックスなし";
-                    return;
-                }
-
-                int count = stats.Item1;
-                long sizeBytes = stats.Item2;
-                string sizeStr;
-                if (sizeBytes >= 1024 * 1024 * 1024)
-                    sizeStr = $"{sizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
-                else if (sizeBytes >= 1024 * 1024)
-                    sizeStr = $"{sizeBytes / (1024.0 * 1024.0):F1} MB";
-                else
-                    sizeStr = $"{sizeBytes / 1024.0:F0} KB";
-
-                FullTextIndexStatus = $"{count:N0} 件 / {sizeStr}";
-            }
-            catch (Exception ex)
-            {
-                FullTextIndexStatus = $"取得エラー: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"FTS status error: {ex}");
-            }
-        }
-
-        private void RebuildFullTextIndex()
-        {
-            var result = System.Windows.MessageBox.Show(
-                "全文検索インデックスを再構築しますか？\n既存のインデックスは削除され、次回起動時にゼロから再構築されます。",
-                "全文検索インデックスの再構築",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Question);
-
-            if (result == System.Windows.MessageBoxResult.Yes)
-            {
-                try
-                {
-                    string dbPath = FullTextIndex.DefaultDbPath;
-                    if (System.IO.File.Exists(dbPath))
-                    {
-                        System.IO.File.Delete(dbPath);
-                        string walPath = dbPath + "-wal";
-                        string shmPath = dbPath + "-shm";
-                        if (System.IO.File.Exists(walPath)) System.IO.File.Delete(walPath);
-                        if (System.IO.File.Exists(shmPath)) System.IO.File.Delete(shmPath);
-                    }
-                    UpdateFullTextIndexStatus();
-                    System.Windows.MessageBox.Show(
-                        "インデックスを削除しました。\n次回起動時に自動的に再構築されます。",
-                        "再構築",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Information);
-                }
-                catch (System.Exception ex)
-                {
-                    System.Windows.MessageBox.Show(
-                        $"インデックスの削除に失敗しました: {ex.Message}",
-                        "エラー",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Error);
-                }
-            }
-        }
-
-        private void DeleteFullTextIndex()
-        {
-            var result = System.Windows.MessageBox.Show(
-                "全文検索インデックスを完全に削除しますか？",
-                "全文検索インデックスの削除",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Warning);
-
-            if (result == System.Windows.MessageBoxResult.Yes)
-            {
-                try
-                {
-                    string dbPath = FullTextIndex.DefaultDbPath;
-                    if (System.IO.File.Exists(dbPath))
-                    {
-                        System.IO.File.Delete(dbPath);
-                        string walPath = dbPath + "-wal";
-                        string shmPath = dbPath + "-shm";
-                        if (System.IO.File.Exists(walPath)) System.IO.File.Delete(walPath);
-                        if (System.IO.File.Exists(shmPath)) System.IO.File.Delete(shmPath);
-                    }
-                    UpdateFullTextIndexStatus();
-                }
-                catch (System.Exception ex)
-                {
-                    System.Windows.MessageBox.Show(
-                        $"削除に失敗しました: {ex.Message}",
-                        "エラー",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Error);
-                }
-            }
-        }
     }
 }

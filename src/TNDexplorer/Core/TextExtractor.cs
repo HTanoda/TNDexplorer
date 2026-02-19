@@ -89,7 +89,7 @@ namespace TNDexplorer.Core
                 var fi = new FileInfo(filePath);
                 if (!fi.Exists || fi.Length == 0)
                     return null;
-                if (fi.Length > MaxFileSizeBytes)
+                if (MaxFileSizeBytes > 0 && fi.Length > MaxFileSizeBytes)
                     return null;
             }
             catch

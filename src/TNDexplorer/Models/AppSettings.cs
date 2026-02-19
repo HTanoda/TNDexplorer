@@ -55,10 +55,7 @@ namespace TNDexplorer.Models
         [DataMember]
         public List<FavoriteFilter> FavoriteFilters { get; set; } = new List<FavoriteFilter>();
 
-        // Full-text search settings
-        [DataMember]
-        public bool FullTextSearchEnabled { get; set; } = false;
-
+        // Content search settings
         [DataMember]
         public List<string> FullTextTargetExtensions { get; set; } = new List<string>();
 

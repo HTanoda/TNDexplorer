@@ -37,9 +37,8 @@
                                  GroupName="Filter" Margin="0,0,6,0" VerticalContentAlignment="Center"/>
                     <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="6,2"/>
                     <ToggleButton Content="内容検索" IsChecked="{Binding IsContentSearch}"
-                                  IsEnabled="{Binding IsFullTextSearchAvailable}"
                                   Padding="6,3" Cursor="Hand" FontSize="11"
-                                  Margin="0,0,4,0" ToolTip="ファイル名検索↔内容検索の切り替え&#10;（設定で全文検索を有効にしてください）">
+                                  Margin="0,0,4,0" ToolTip="内容検索モード: 詳細パネルでフォルダと拡張子を指定して検索">
                         <ToggleButton.Style>
                             <Style TargetType="ToggleButton">
                                 <Setter Property="Background" Value="Transparent"/>
@@ -217,8 +216,8 @@
             <StatusBarItem>
                 <TextBlock Text="{Binding IndexStatusText}" FontSize="11" Foreground="Gray"/>
             </StatusBarItem>
-            <Separator Visibility="{Binding IsFullTextSearchAvailable, Converter={StaticResource BoolToVisibility}}"/>
-            <StatusBarItem Visibility="{Binding IsFullTextSearchAvailable, Converter={StaticResource BoolToVisibility}}">
+            <Separator Visibility="{Binding IsContentSearch, Converter={StaticResource BoolToVisibility}}"/>
+            <StatusBarItem Visibility="{Binding IsContentSearch, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="{Binding FullTextStatus}" FontSize="11" Foreground="#FF0078D4"/>
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right"

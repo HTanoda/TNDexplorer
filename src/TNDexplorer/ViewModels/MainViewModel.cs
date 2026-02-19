@@ -76,9 +76,8 @@ namespace TNDexplorer.ViewModels
         private bool _alternateRowColors;
         private bool _groupByFiscalYear;
 
-        // Full-text search
+        // Content search (grep-style)
         private bool _isContentSearch;
-        private bool _isFullTextSearchAvailable;
         private string _fullTextStatus = "";
 
         private DispatcherTimer _debounceTimer;
@@ -325,21 +324,20 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _groupByFiscalYear, value);
         }
 
-        // Full-text search
+        // Content search (grep-style)
         public bool IsContentSearch
         {
             get => _isContentSearch;
             set
             {
                 if (SetProperty(ref _isContentSearch, value))
+                {
+                    // Auto-open advanced panel when switching to content search
+                    if (value && !IsAdvancedSearchVisible)
+                        IsAdvancedSearchVisible = true;
                     ScheduleSearch();
+                }
             }
-        }
-
-        public bool IsFullTextSearchAvailable
-        {
-            get => _isFullTextSearchAvailable;
-            private set => SetProperty(ref _isFullTextSearchAvailable, value);
         }
 
         public string FullTextStatus
@@ -392,7 +390,6 @@ namespace TNDexplorer.ViewModels
             OpenAboutCommand = new RelayCommand(() => RequestOpenAbout?.Invoke());
 
             _indexManager.ProgressChanged += OnIndexingProgress;
-            _indexManager.FullTextProgressChanged += OnFullTextProgress;
 
             _debounceTimer = new DispatcherTimer
             {
@@ -603,26 +600,55 @@ namespace TNDexplorer.ViewModels
                 var advOptions = BuildAdvancedOptions();
                 List<FileResultItem> results;
 
-                // Content search mode
-                if (_isContentSearch && _indexManager.IsFullTextSearchAvailable)
+                // Content search mode (grep-style)
+                if (_isContentSearch)
                 {
-                    int minLen = _indexManager.FullTextIndex?.MinQueryLength ?? 3;
-                    if (string.IsNullOrWhiteSpace(query) || query.Length < minLen)
+                    if (string.IsNullOrWhiteSpace(query))
                     {
                         _dispatcher.Invoke(() =>
                         {
                             Results = new List<FileResultItem>();
-                            StatusText = $"内容検索: {minLen}文字以上のキーワードを入力してください";
+                            StatusText = "内容検索: キーワードを入力してください";
                         });
                         return;
                     }
 
-                    StatusText = "内容検索中...";
+                    // Folder path is required for content search
+                    if (string.IsNullOrWhiteSpace(_folderPath))
+                    {
+                        _dispatcher.Invoke(() =>
+                        {
+                            Results = new List<FileResultItem>();
+                            if (!IsAdvancedSearchVisible)
+                                IsAdvancedSearchVisible = true;
+                            StatusText = "内容検索: フォルダを指定してください（詳細パネルで設定）";
+                        });
+                        return;
+                    }
+
+                    _dispatcher.Invoke(() =>
+                    {
+                        StatusText = "内容検索中...";
+                        FullTextStatus = "";
+                    });
+
+                    var progress = new Progress<ContentSearchProgress>(p =>
+                    {
+                        _dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            FullTextStatus = $"内容検索: {p.ScannedFiles:N0}/{p.TotalFiles:N0} 件スキャン中... ({p.MatchedFiles:N0} 件ヒット)";
+                        }));
+                    });
 
                     results = await _indexManager.SearchEngine.ContentSearchAsync(
                         query, _currentFilter, _settings.MaxSearchResults, ct,
-                        _indexManager.FullTextIndex, advOptions)
+                        _indexManager.TextExtractor, advOptions, progress)
                         .ConfigureAwait(false);
+
+                    _dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        FullTextStatus = $"内容検索完了: {results.Count:N0} 件ヒット";
+                    }));
                 }
                 else
                 {
@@ -661,25 +687,7 @@ namespace TNDexplorer.ViewModels
                     IndexStatusText = e.Message;
 
                 IsIndexing = e.State == IndexingState.Indexing;
-                IsFullTextSearchAvailable = _indexManager.IsFullTextSearchAvailable;
                 UpdateStatusText();
-            }));
-        }
-
-        private void OnFullTextProgress(object sender, FullTextCrawlProgressEventArgs e)
-        {
-            _dispatcher.BeginInvoke(new Action(() =>
-            {
-                IsFullTextSearchAvailable = _indexManager.IsFullTextSearchAvailable;
-
-                if (e.IsComplete)
-                {
-                    FullTextStatus = $"全文検索: {e.ProcessedFiles:N0} 件処理完了";
-                }
-                else
-                {
-                    FullTextStatus = $"全文検索: {e.ProcessedFiles:N0}/{e.TotalTargetFiles:N0} 件処理中...";
-                }
             }));
         }
 
@@ -771,23 +779,9 @@ namespace TNDexplorer.ViewModels
             GroupByFiscalYear = settings.GroupByFiscalYear;
             LoadFavorites();
 
-            // Handle FTS enable/disable changes
-            bool ftsWasEnabled = _settings.FullTextSearchEnabled;
-            _settings.FullTextSearchEnabled = settings.FullTextSearchEnabled;
+            // Update content search settings
             _settings.FullTextTargetExtensions = settings.FullTextTargetExtensions;
             _settings.FullTextMaxFileSizeMB = settings.FullTextMaxFileSizeMB;
-
-            if (settings.FullTextSearchEnabled && !ftsWasEnabled)
-            {
-                _indexManager.EnableFullTextSearch(settings);
-            }
-            else if (!settings.FullTextSearchEnabled && ftsWasEnabled)
-            {
-                _indexManager.DisableFullTextSearch();
-                IsContentSearch = false;
-            }
-
-            IsFullTextSearchAvailable = _indexManager.IsFullTextSearchAvailable;
         }
 
         public void Dispose()

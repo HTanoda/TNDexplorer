@@ -6,9 +6,10 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Icon="/Resources/app.ico">
+        Icon="/Resources/app.ico"
+        FontFamily="{StaticResource UIFont}">
 
-    <Grid Margin="25">
+    <Grid Margin="28">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -17,24 +18,28 @@
         </Grid.RowDefinitions>
 
         <!-- App Icon + Title -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
-            <Image Source="/Resources/app.ico" Width="48" Height="48" Margin="0,0,12,0"
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+            <Image Source="/Resources/app.ico" Width="48" Height="48" Margin="0,0,14,0"
                    RenderOptions.BitmapScalingMode="HighQuality"/>
             <StackPanel VerticalAlignment="Center">
-                <TextBlock Text="TNDexplorer" FontSize="22" FontWeight="Bold"/>
-                <TextBlock Text="バージョン 1.0.0.0" FontSize="13" Foreground="#FF666666"/>
+                <TextBlock Text="TNDexplorer" FontSize="22" FontWeight="Bold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="バージョン 1.0.0.0" FontSize="13"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
             </StackPanel>
         </StackPanel>
 
-        <TextBlock Grid.Row="1" FontSize="12" Margin="0,0,0,10" Foreground="#FF444444">
+        <TextBlock Grid.Row="1" FontSize="12" Margin="0,0,0,12"
+                   Foreground="{StaticResource TextSecondaryBrush}">
             超高速ファイル検索ツール (NTFS MFT + ネットワークドライブ対応)
         </TextBlock>
 
         <!-- License -->
-        <Border Grid.Row="2" Background="#FFF8F8F8" CornerRadius="4" Padding="12,10"
-                BorderBrush="#FFE0E0E0" BorderThickness="1">
+        <Border Grid.Row="2" Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="14,10"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock TextWrapping="Wrap" FontSize="11" FontFamily="Consolas" Foreground="#FF333333">
+                <TextBlock TextWrapping="Wrap" FontSize="11" FontFamily="Consolas"
+                           Foreground="{StaticResource TextSecondaryBrush}">
 MIT License
 
 Copyright (c) TND ( Hiroki Tanoda )
@@ -60,8 +65,8 @@ SOFTWARE.
             </ScrollViewer>
         </Border>
 
-        <Button Grid.Row="3" Content="閉じる" Width="80" Height="28"
-                Click="OnCloseClick" HorizontalAlignment="Right" Margin="0,12,0,0"
-                IsCancel="True"/>
+        <Button Grid.Row="3" Content="閉じる" Width="80" Height="30"
+                Click="OnCloseClick" HorizontalAlignment="Right" Margin="0,14,0,0"
+                IsCancel="True" Style="{StaticResource GhostButtonStyle}"/>
     </Grid>
 </Window>

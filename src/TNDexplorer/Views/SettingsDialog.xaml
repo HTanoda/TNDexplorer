@@ -3,33 +3,34 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:converters="clr-namespace:TNDexplorer.Converters"
         Title="設定 - TNDexplorer"
-        Width="600" Height="700"
+        Width="620" Height="720"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        FontFamily="{StaticResource UIFont}">
 
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
     </Window.Resources>
 
-    <Grid Margin="10">
+    <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TabControl Grid.Row="0">
-            <!-- 全般 タブ -->
-            <TabItem Header="全般" Padding="12,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+            <!-- ===== 全般 タブ ===== -->
+            <TabItem Header="全般">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="16,12">
                     <StackPanel>
-                        <TextBlock Text="表示"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                        <StackPanel Margin="5,0,0,15">
-                            <CheckBox IsChecked="{Binding AlternateRowColors}" Margin="0,3"
+                        <!-- Display -->
+                        <TextBlock Text="表示" Style="{StaticResource SectionHeaderStyle}"/>
+                        <StackPanel Margin="8,0,0,20">
+                            <CheckBox IsChecked="{Binding AlternateRowColors}" Margin="0,4"
                                       Content="交互別色表示"
                                       ToolTip="検索結果の背景色を1行おきに色分けして表示します"/>
-                            <CheckBox IsChecked="{Binding GroupByFiscalYear}" Margin="0,3"
+                            <CheckBox IsChecked="{Binding GroupByFiscalYear}" Margin="0,4"
                                       Content="年度でグループ化"
                                       ToolTip="更新日時の年度（4月〜翌3月）ごとにラインを表示します"/>
                         </StackPanel>
@@ -37,20 +38,20 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- ドライブ タブ -->
-            <TabItem Header="ドライブ" Padding="12,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+            <!-- ===== ドライブ タブ ===== -->
+            <TabItem Header="ドライブ">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="16,12">
                     <StackPanel>
                         <!-- Local Drives -->
-                        <TextBlock Text="ローカルドライブ (NTFS)"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <ItemsControl ItemsSource="{Binding LocalDrives}" Margin="0,0,0,15">
+                        <TextBlock Text="ローカルドライブ (NTFS)" Style="{StaticResource SectionHeaderStyle}"/>
+                        <ItemsControl ItemsSource="{Binding LocalDrives}" Margin="0,0,0,20">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="8,4">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" Width="200"/>
-                                            <TextBlock Text="{Binding SizeInfo}" Foreground="Gray" Margin="10,0,0,0"/>
+                                            <TextBlock Text="{Binding SizeInfo}"
+                                                       Foreground="{StaticResource TextMutedBrush}" Margin="10,0,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </DataTemplate>
@@ -58,19 +59,21 @@
                         </ItemsControl>
 
                         <!-- Network Drives -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                            <TextBlock Text="ネットワークドライブ"
-                                       FontSize="14" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="ネットワークドライブ" Style="{StaticResource SectionHeaderStyle}"
+                                       Margin="0"/>
                             <Button Content="再検出" Command="{Binding RefreshDrivesCommand}"
-                                    Margin="15,0,0,0" Padding="8,2" FontSize="11"/>
+                                    Style="{StaticResource GhostButtonStyle}"
+                                    Margin="16,0,0,0" Padding="10,3" FontSize="11"/>
                         </StackPanel>
-                        <ItemsControl ItemsSource="{Binding NetworkDrives}" Margin="0,0,0,15">
+                        <ItemsControl ItemsSource="{Binding NetworkDrives}" Margin="0,0,0,20">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="8,4">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" Width="200"/>
-                                            <TextBlock Text="{Binding UncPath}" Foreground="Gray" Margin="10,0,0,0"/>
+                                            <TextBlock Text="{Binding UncPath}"
+                                                       Foreground="{StaticResource TextMutedBrush}" Margin="10,0,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </DataTemplate>
@@ -78,69 +81,66 @@
                         </ItemsControl>
 
                         <!-- Custom Folders -->
-                        <TextBlock Text="フォルダ"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <TextBlock Text="フォルダ" Style="{StaticResource SectionHeaderStyle}"/>
                         <TextBlock Text="手動で走査対象のフォルダを追加できます。" FontSize="11"
-                                   Foreground="Gray" Margin="0,0,0,5"/>
-                        <ItemsControl ItemsSource="{Binding CustomFolders}" Margin="0,0,0,5">
+                                   Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,6"/>
+                        <ItemsControl ItemsSource="{Binding CustomFolders}" Margin="0,0,0,8">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
+                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="8,4">
                                         <TextBlock Text="{Binding FolderPath}" ToolTip="{Binding FolderPath}"/>
                                     </CheckBox>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                            <Button Content="追加" Padding="12,4" FontSize="12"
-                                    Click="OnAddCustomFolder"
-                                    Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand"/>
-                            <Button Content="選択した項目を削除" Padding="12,4" FontSize="12"
-                                    Click="OnRemoveCustomFolder" Margin="8,0,0,0"
-                                    Background="#FFDC3545" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                            <Button Content="追加" Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="OnAddCustomFolder" Padding="14,5"/>
+                            <Button Content="選択した項目を削除" Style="{StaticResource DangerButtonStyle}"
+                                    Click="OnRemoveCustomFolder" Margin="8,0,0,0" Padding="14,5"/>
                         </StackPanel>
 
                         <!-- Search Settings -->
-                        <TextBlock Text="検索設定"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <StackPanel Margin="5,0,0,15">
-                            <StackPanel Orientation="Horizontal" Margin="0,3">
-                                <TextBlock Text="最大検索結果数:" VerticalAlignment="Center" Width="170"/>
+                        <TextBlock Text="検索設定" Style="{StaticResource SectionHeaderStyle}"/>
+                        <StackPanel Margin="8,0,0,20">
+                            <StackPanel Orientation="Horizontal" Margin="0,4">
+                                <TextBlock Text="最大検索結果数:" VerticalAlignment="Center" Width="170"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
                                 <TextBox Text="{Binding MaxSearchResults}" Width="100"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,3">
-                                <TextBlock Text="NWリスキャン間隔 (分):" VerticalAlignment="Center" Width="170"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4">
+                                <TextBlock Text="NWリスキャン間隔 (分):" VerticalAlignment="Center" Width="170"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
                                 <TextBox Text="{Binding NetworkRescanIntervalMinutes}" Width="100"/>
-                                <TextBlock Text="(0 = リスキャンしない)" Foreground="Gray" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11"/>
+                                <TextBlock Text="(0 = リスキャンしない)"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
                             </StackPanel>
                         </StackPanel>
 
                         <!-- Hidden / System file exclusion -->
-                        <TextBlock Text="フィルタ設定"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <StackPanel Margin="5,0,0,15">
-                            <CheckBox IsChecked="{Binding ExcludeHiddenFiles}" Margin="0,3"
+                        <TextBlock Text="フィルタ設定" Style="{StaticResource SectionHeaderStyle}"/>
+                        <StackPanel Margin="8,0,0,20">
+                            <CheckBox IsChecked="{Binding ExcludeHiddenFiles}" Margin="0,4"
                                       Content="隠しファイルとフォルダを除外する"/>
-                            <CheckBox IsChecked="{Binding ExcludeSystemFiles}" Margin="0,3"
+                            <CheckBox IsChecked="{Binding ExcludeSystemFiles}" Margin="0,4"
                                       Content="システムファイルとフォルダを除外する"/>
                         </StackPanel>
 
                         <!-- Exclude Patterns -->
-                        <TextBlock Text="除外フォルダ (1行に1つ):"
-                                   FontSize="12" Margin="0,0,0,3"/>
+                        <TextBlock Text="除外フォルダ" Style="{StaticResource SectionHeaderStyle}"/>
+                        <TextBlock Text="1行に1つずつ除外するフォルダパスを指定します。"
+                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding ExcludePatternsText}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto"
-                                 FontSize="12" Height="100"/>
+                                 Style="{StaticResource MultiLineTextBoxStyle}"
+                                 Height="100"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
-            <!-- お気に入り タブ -->
-            <TabItem Header="お気に入り" Padding="12,4">
-                <Grid Margin="10">
+            <!-- ===== お気に入り タブ ===== -->
+            <TabItem Header="お気に入り">
+                <Grid Margin="16,12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -150,14 +150,14 @@
 
                     <!-- Header -->
                     <TextBlock Grid.Row="0" Text="登録済みのお気に入りフィルタ"
-                               FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                               Style="{StaticResource SectionHeaderStyle}"/>
 
-                    <!-- Favorites list with multi-select -->
+                    <!-- Favorites list -->
                     <ListView Grid.Row="1" ItemsSource="{Binding SettingsFavorites}"
                               SelectionMode="Extended"
                               x:Name="FavoritesListView"
                               SelectionChanged="OnFavoritesSelectionChanged"
-                              BorderThickness="1" BorderBrush="#FFD1D1D1">
+                              BorderThickness="1" BorderBrush="{StaticResource BorderBrush}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="名前" Width="150"
@@ -172,24 +172,20 @@
                         </ListView.View>
                     </ListView>
 
-                    <!-- Edit / Delete selected -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-                        <Button Content="編集" Padding="12,4" FontSize="12"
-                                Click="OnEditSelectedFavorite"
-                                Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                Cursor="Hand" x:Name="EditFavoriteButton" IsEnabled="False"/>
-                        <Button Content="選択した項目を削除" Padding="12,4" FontSize="12"
-                                Click="OnDeleteSelectedFavorites" Margin="8,0,0,0"
-                                Background="#FFDC3545" Foreground="White" BorderThickness="0"
-                                Cursor="Hand"/>
+                    <!-- Edit / Delete -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Content="編集" Style="{StaticResource PrimaryButtonStyle}"
+                                Click="OnEditSelectedFavorite" Padding="14,5"
+                                x:Name="EditFavoriteButton" IsEnabled="False"/>
+                        <Button Content="選択した項目を削除" Style="{StaticResource DangerButtonStyle}"
+                                Click="OnDeleteSelectedFavorites" Margin="8,0,0,0" Padding="14,5"/>
                         <TextBlock Text="(複数選択: Ctrl+クリック / Shift+クリック)"
-                                   Foreground="Gray" FontSize="11" VerticalAlignment="Center"
-                                   Margin="10,0,0,0"/>
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="12,0,0,0"/>
                     </StackPanel>
 
-                    <!-- Add / Edit favorite -->
-                    <GroupBox Grid.Row="3" Header="お気に入り登録" Margin="0,12,0,0"
-                              Padding="8" FontSize="12">
+                    <!-- Add / Edit form -->
+                    <GroupBox Grid.Row="3" Header="お気に入り登録" Margin="0,14,0,0" Padding="12">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -203,104 +199,113 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="名前:" VerticalAlignment="Center" Margin="0,0,8,4"/>
-                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding NewSettingsFavName, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="4,3" Margin="0,0,0,4"/>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="名前:"
+                                       VerticalAlignment="Center" Margin="0,0,10,6"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1"
+                                     Text="{Binding NewSettingsFavName, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="拡張子:" VerticalAlignment="Center" Margin="0,0,8,4"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding NewSettingsFavExt, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="4,3" Margin="0,0,0,4"
-                                     ToolTip="例: .pdf"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="拡張子:"
+                                       VerticalAlignment="Center" Margin="0,0,10,6"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding NewSettingsFavExt, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6" ToolTip="例: .pdf"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="フォルダ:" VerticalAlignment="Center" Margin="0,0,8,4"/>
-                            <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,4">
-                                <Button DockPanel.Dock="Right" Content="..." Padding="6,3" Margin="4,0,0,0"
-                                        Click="OnBrowseNewFavFolder" Cursor="Hand"/>
-                                <TextBox Text="{Binding NewSettingsFavFolder, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="4,3"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="フォルダ:"
+                                       VerticalAlignment="Center" Margin="0,0,10,6"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right" Content="..."
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Click="OnBrowseNewFavFolder" Padding="8,4" Margin="6,0,0,0"/>
+                                <TextBox Text="{Binding NewSettingsFavFolder, UpdateSourceTrigger=PropertyChanged}"/>
                             </DockPanel>
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="キーワード:" VerticalAlignment="Center" Margin="0,0,8,4"/>
-                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding NewSettingsFavKeyword, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="4,3" Margin="0,0,0,4"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="キーワード:"
+                                       VerticalAlignment="Center" Margin="0,0,10,6"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <TextBox Grid.Row="3" Grid.Column="1"
+                                     Text="{Binding NewSettingsFavKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,6"/>
 
-                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal">
-                                <Button Content="{Binding FavRegisterButtonText}" HorizontalAlignment="Left"
-                                        Padding="16,4" FontSize="12"
-                                        Click="OnAddSettingsFavorite"
-                                        Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                        Cursor="Hand"/>
-                                <Button Content="キャンセル" HorizontalAlignment="Left"
-                                        Padding="10,4" FontSize="12" Margin="8,0,0,0"
-                                        Click="OnCancelEditFavorite"
-                                        Visibility="{Binding IsEditingFavorite, Converter={StaticResource BoolToVisibility}}"
-                                        Background="Transparent" BorderThickness="1" BorderBrush="#FFD1D1D1"
-                                        Cursor="Hand"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,4,0,0">
+                                <Button Content="{Binding FavRegisterButtonText}"
+                                        Style="{StaticResource PrimaryButtonStyle}"
+                                        Click="OnAddSettingsFavorite"/>
+                                <Button Content="キャンセル"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Click="OnCancelEditFavorite" Margin="8,0,0,0"
+                                        Visibility="{Binding IsEditingFavorite, Converter={StaticResource BoolToVisibility}}"/>
                             </StackPanel>
                         </Grid>
                     </GroupBox>
                 </Grid>
             </TabItem>
 
-            <!-- 内容検索 タブ -->
-            <TabItem Header="内容検索" Padding="12,4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
+            <!-- ===== 内容検索 タブ ===== -->
+            <TabItem Header="内容検索">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="16,12">
                     <StackPanel>
                         <!-- Description -->
-                        <TextBlock Text="内容検索（grep方式）"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                        <TextBlock FontSize="12" Foreground="#FF333333" Margin="5,0,0,12" TextWrapping="Wrap"
+                        <TextBlock Text="内容検索（grep方式）" Style="{StaticResource SectionHeaderStyle}"/>
+                        <TextBlock FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,0,0,16" TextWrapping="Wrap"
                                    Text="検索実行時にファイル内容を直接読み取ります。"/>
 
                         <!-- Target Extensions -->
-                        <TextBlock Text="対象拡張子"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <TextBlock Text="対象拡張子" Style="{StaticResource SectionHeaderStyle}"/>
                         <TextBlock Text="セミコロン（;）区切りで対象拡張子を指定します。"
-                                   FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding FullTextTargetExtensionsText, UpdateSourceTrigger=PropertyChanged}"
-                                 FontSize="12" Padding="4,3"
-                                 AcceptsReturn="False" TextWrapping="Wrap"
-                                 Height="60" VerticalScrollBarVisibility="Auto"
+                                 Style="{StaticResource MultiLineTextBoxStyle}"
+                                 AcceptsReturn="False" Height="60"
                                  ToolTip="例: .txt; .csv; .pdf; .docx; .xlsx; .pptx"/>
 
                         <!-- Max File Size -->
-                        <TextBlock Text="最大ファイルサイズ"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,12,0,5"/>
-                        <StackPanel Orientation="Horizontal" Margin="5,0,0,0">
-                            <TextBox Text="{Binding FullTextMaxFileSizeMB}" Width="80"
-                                     FontSize="12" Padding="4,3"/>
-                            <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                        <TextBlock Text="最大ファイルサイズ" Style="{StaticResource SectionHeaderStyle}"
+                                   Margin="0,16,0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                            <TextBox Text="{Binding FullTextMaxFileSizeMB}" Width="80"/>
+                            <TextBlock Text="MB" VerticalAlignment="Center" Margin="8,0,0,0"/>
                             <TextBlock Text="(0 = 無制限、この値を超えるファイルはスキップされます)"
-                                       FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0"/>
                         </StackPanel>
 
                         <!-- Include filename search -->
-                        <TextBlock Text="検索オプション"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,12,0,5"/>
+                        <TextBlock Text="検索オプション" Style="{StaticResource SectionHeaderStyle}"
+                                   Margin="0,16,0,8"/>
                         <CheckBox IsChecked="{Binding ContentSearchIncludeFilename}"
                                   Content="ファイル名も検索対象に含める"
-                                  FontSize="12" Margin="5,0,0,0"
+                                  Margin="8,0,0,0"
                                   ToolTip="ONの場合、内容検索時にファイル名の検索結果も合わせて表示します"/>
 
                         <!-- Notes -->
-                        <TextBlock FontSize="11" Foreground="Gray" Margin="0,15,0,0" TextWrapping="Wrap">
-                            <Run Text="使い方:"/>
-                            <LineBreak/>
-                            <Run Text="1. メイン画面で「内容検索」ボタンをONにする"/>
-                            <LineBreak/>
-                            <Run Text="2. 詳細パネルで検索対象のフォルダを指定する"/>
-                            <LineBreak/>
-                            <Run Text="3. キーワードを入力して検索"/>
-                            <LineBreak/>
-                            <LineBreak/>
-                            <Run Text="注意事項:"/>
-                            <LineBreak/>
-                            <Run Text="・フォルダ指定は必須です（全ドライブ検索は非対応）"/>
-                            <LineBreak/>
-                            <Run Text="・Office文書 (.docx/.xlsx/.pptx) は自動抽出対応（Office不要）"/>
-                            <LineBreak/>
-                            <Run Text="・PDF文書は自動抽出対応（Adobe Reader不要）"/>
-                        </TextBlock>
+                        <Border Background="{StaticResource Surface2Brush}"
+                                CornerRadius="6" Padding="14,12" Margin="0,20,0,0"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                            <TextBlock FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                                       TextWrapping="Wrap" LineHeight="20">
+                                <Run FontWeight="SemiBold" Text="使い方:"/>
+                                <LineBreak/>
+                                <Run Text="1. メイン画面で「内容検索」ボタンをONにする"/>
+                                <LineBreak/>
+                                <Run Text="2. 詳細パネルで検索対象のフォルダを指定する"/>
+                                <LineBreak/>
+                                <Run Text="3. キーワードを入力して検索"/>
+                                <LineBreak/>
+                                <LineBreak/>
+                                <Run FontWeight="SemiBold" Text="注意事項:"/>
+                                <LineBreak/>
+                                <Run Text="・フォルダ指定は必須です（全ドライブ検索は非対応）"/>
+                                <LineBreak/>
+                                <Run Text="・Office文書 (.docx/.xlsx/.pptx) は自動抽出対応（Office不要）"/>
+                                <LineBreak/>
+                                <Run Text="・PDF文書は自動抽出対応（Adobe Reader不要）"/>
+                            </TextBlock>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -308,12 +313,13 @@
 
         <!-- Bottom buttons -->
         <StackPanel Grid.Row="1" Orientation="Horizontal"
-                    HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="保存" Width="80" Height="30"
+                    HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="保存" Width="90" Height="34"
                     Click="OnSaveClick" IsDefault="True"
-                    Background="#FF0078D4" Foreground="White" FontWeight="SemiBold"/>
-            <Button Content="キャンセル" Width="80" Height="30"
-                    Click="OnCancelClick" Margin="10,0,0,0" IsCancel="True"/>
+                    Style="{StaticResource PrimaryButtonStyle}"/>
+            <Button Content="キャンセル" Width="90" Height="34"
+                    Click="OnCancelClick" Margin="10,0,0,0" IsCancel="True"
+                    Style="{StaticResource GhostButtonStyle}"/>
         </StackPanel>
     </Grid>
 </Window>

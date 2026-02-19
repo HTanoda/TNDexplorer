@@ -5,8 +5,9 @@
         Width="500" Height="180"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
-    <Grid Margin="12">
+        ShowInTaskbar="False"
+        FontFamily="{StaticResource UIFont}">
+    <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -16,28 +17,31 @@
 
         <!-- Description -->
         <TextBlock Grid.Row="0" Text="フォルダパスを入力するか、参照ボタンで選択してください。"
-                   FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                   FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"
+                   Foreground="{StaticResource TextSecondaryBrush}"/>
 
         <!-- Path input + Browse button -->
         <DockPanel Grid.Row="1">
-            <Button DockPanel.Dock="Right" Content="参照..." FontSize="12"
-                    Padding="12,4" Margin="8,0,0,0"
+            <Button DockPanel.Dock="Right" Content="参照..."
+                    Style="{StaticResource GhostButtonStyle}"
+                    Padding="14,5" Margin="8,0,0,0"
                     Click="OnBrowseClick"/>
-            <TextBox x:Name="PathTextBox" FontSize="12" Padding="4,3"
-                     VerticalContentAlignment="Center"
+            <TextBox x:Name="PathTextBox" FontSize="12"
                      ToolTip="フォルダパスを直接入力できます（例: \\server\share\folder）"/>
         </DockPanel>
 
         <!-- Hint -->
-        <TextBlock Grid.Row="2" FontSize="10" Foreground="Gray" Margin="0,4,0,0"
+        <TextBlock Grid.Row="2" FontSize="10" Foreground="{StaticResource TextMutedBrush}" Margin="0,6,0,0"
                    Text="UNCパス（\\server\share）も直接入力できます"/>
 
         <!-- OK / Cancel buttons -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="OK" Width="80" Padding="4,4"
-                    IsDefault="True" Click="OnOkClick"/>
-            <Button Content="キャンセル" Width="80" Padding="4,4" Margin="8,0,0,0"
-                    IsCancel="True" Click="OnCancelClick"/>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="OK" Width="80" Height="30"
+                    IsDefault="True" Click="OnOkClick"
+                    Style="{StaticResource PrimaryButtonStyle}"/>
+            <Button Content="キャンセル" Width="80" Height="30" Margin="8,0,0,0"
+                    IsCancel="True" Click="OnCancelClick"
+                    Style="{StaticResource GhostButtonStyle}"/>
         </StackPanel>
     </Grid>
 </Window>

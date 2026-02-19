@@ -5,9 +5,10 @@
         Width="600" Height="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        FontFamily="{StaticResource UIFont}">
 
-    <Grid Margin="20">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
@@ -15,85 +16,105 @@
 
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="検索構文ガイド" FontSize="18" FontWeight="Bold" Margin="0,0,0,12"/>
+                <TextBlock Text="検索構文ガイド" FontSize="18" FontWeight="Bold"
+                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,14"/>
 
                 <!-- AND -->
                 <TextBlock Text="AND検索（半角スペース）" FontSize="14" FontWeight="SemiBold"
-                           Foreground="#FF0078D4" Margin="0,0,0,4"/>
-                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,4">
+                           Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextSecondaryBrush}">
                     複数のキーワードを半角スペースで区切ると、すべての条件に一致するファイルを検索します。
                 </TextBlock>
-                <Border Background="#FFF5F5F5" CornerRadius="3" Padding="10,6" Margin="0,0,0,12">
+                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,16"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt テスト"/>
-                        <TextBlock FontSize="11" Foreground="Gray" Text="  拡張子が txt で、ファイル名に「テスト」を含むファイル" Margin="0,2,0,0"/>
+                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt テスト"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                   Text="  拡張子が txt で、ファイル名に「テスト」を含むファイル" Margin="0,3,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <!-- OR -->
                 <TextBlock Text="OR検索（ | ）" FontSize="14" FontWeight="SemiBold"
-                           Foreground="#FF0078D4" Margin="0,0,0,4"/>
-                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,4">
+                           Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextSecondaryBrush}">
                     項目を「|」（パイプ）で区切ると、いずれかの条件に一致するファイルを検索します。
                 </TextBlock>
-                <Border Background="#FFF5F5F5" CornerRadius="3" Padding="10,6" Margin="0,0,0,4">
+                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,6"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt|ext:doc"/>
-                        <TextBlock FontSize="11" Foreground="Gray" Text="  拡張子が txt または doc のファイル" Margin="0,2,0,0"/>
+                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt|ext:doc"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                   Text="  拡張子が txt または doc のファイル" Margin="0,3,0,0"/>
                     </StackPanel>
                 </Border>
-                <Border Background="#FFFFF3CD" CornerRadius="3" Padding="10,6" Margin="0,0,0,12">
-                    <StackPanel>
-                        <TextBlock FontSize="11" Foreground="#FF856404" TextWrapping="Wrap">
-                            注意: 「ext:txt|doc」と書くと、「拡張子がtxt」または「ファイル名にdocを含む」という意味になります。
-                        </TextBlock>
-                    </StackPanel>
+                <Border Background="#FFFFF8E1" CornerRadius="6" Padding="12,8" Margin="0,0,0,16"
+                        BorderBrush="#FFFFECB3" BorderThickness="1">
+                    <TextBlock FontSize="11" Foreground="#FF6D4C00" TextWrapping="Wrap">
+                        注意: 「ext:txt|doc」と書くと、「拡張子がtxt」または「ファイル名にdocを含む」という意味になります。
+                    </TextBlock>
                 </Border>
 
                 <!-- OR + AND -->
                 <TextBlock Text="ORとANDの組み合わせ" FontSize="14" FontWeight="SemiBold"
-                           Foreground="#FF0078D4" Margin="0,0,0,4"/>
-                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,4">
+                           Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextSecondaryBrush}">
                     ORとANDを組み合わせて、複雑な検索条件を指定できます。
                 </TextBlock>
-                <Border Background="#FFF5F5F5" CornerRadius="3" Padding="10,6" Margin="0,0,0,12">
+                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,16"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt|ext:doc テスト"/>
-                        <TextBlock FontSize="11" Foreground="Gray" Text="  拡張子が txt か doc で、ファイル名に「テスト」を含むファイル" Margin="0,2,0,0"/>
+                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt|ext:doc テスト"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                   Text="  拡張子が txt か doc で、ファイル名に「テスト」を含むファイル" Margin="0,3,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <!-- ext: semicolon syntax -->
                 <TextBlock Text="拡張子の指定（ext:）" FontSize="14" FontWeight="SemiBold"
-                           Foreground="#FF0078D4" Margin="0,0,0,4"/>
-                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,4">
+                           Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextSecondaryBrush}">
                     「ext:」の後にセミコロン（;）区切りで複数の拡張子を指定できます。末尾のセミコロンは省略可能です。
                 </TextBlock>
-                <Border Background="#FFF5F5F5" CornerRadius="3" Padding="10,6" Margin="0,0,0,12">
+                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,16"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:jpg;gif;png"/>
-                        <TextBlock FontSize="11" Foreground="Gray" Text="  拡張子が jpg、gif、または png のファイル" Margin="0,2,0,0"/>
+                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:jpg;gif;png"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                   Text="  拡張子が jpg、gif、または png のファイル" Margin="0,3,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Negation -->
                 <TextBlock Text="否定検索（ ! ）" FontSize="14" FontWeight="SemiBold"
-                           Foreground="#FF0078D4" Margin="0,0,0,4"/>
-                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,4">
+                           Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextSecondaryBrush}">
                     文字列の先頭に「!」を付けると否定になります。AND検索と組み合わせて除外条件として使えます。
                 </TextBlock>
-                <Border Background="#FFF5F5F5" CornerRadius="3" Padding="10,6" Margin="0,0,0,12">
+                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,16"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt テスト !否定"/>
-                        <TextBlock FontSize="11" Foreground="Gray" TextWrapping="Wrap"
-                                   Text="  拡張子が txt でファイル名に「テスト」を含むが、「否定」を含まないファイル" Margin="0,2,0,0"/>
+                        <TextBlock FontFamily="Consolas" FontSize="12" Text="ext:txt テスト !否定"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
+                                   Text="  拡張子が txt でファイル名に「テスト」を含むが、「否定」を含まないファイル" Margin="0,3,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Keyboard shortcuts -->
                 <TextBlock Text="キーボードショートカット" FontSize="14" FontWeight="SemiBold"
-                           Foreground="#FF0078D4" Margin="0,0,0,4"/>
-                <Border Background="#FFF5F5F5" CornerRadius="3" Padding="10,6" Margin="0,0,0,8">
+                           Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,6"/>
+                <Border Background="{StaticResource Surface2Brush}" CornerRadius="6" Padding="12,8" Margin="0,0,0,8"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120"/>
@@ -103,17 +124,21 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl + F" FontFamily="Consolas" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="検索窓をクリアしてフォーカス" FontSize="12" Margin="0,0,0,4"/>
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Escape" FontFamily="Consolas" FontSize="12"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="検索窓をクリア" FontSize="12"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl + F" FontFamily="Consolas" FontSize="12"
+                                   Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,5"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="検索窓をクリアしてフォーカス" FontSize="12"
+                                   Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,5"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Escape" FontFamily="Consolas" FontSize="12"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="検索窓をクリア" FontSize="12"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
                     </Grid>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
         <Button Grid.Row="1" Content="閉じる" Width="80" Height="30"
-                Click="OnCloseClick" HorizontalAlignment="Right" Margin="0,10,0,0"
-                IsCancel="True"/>
+                Click="OnCloseClick" HorizontalAlignment="Right" Margin="0,12,0,0"
+                IsCancel="True" Style="{StaticResource GhostButtonStyle}"/>
     </Grid>
 </Window>

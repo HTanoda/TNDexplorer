@@ -179,8 +179,6 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _contentSearchIncludeFilename, value);
         }
 
-        public bool HasNetworkDrives => NetworkDrives.Count > 0;
-
         public RelayCommand RefreshDrivesCommand { get; }
         public RelayCommand SaveCommand { get; }
 
@@ -376,7 +374,6 @@ namespace TNDexplorer.ViewModels
         private void RefreshDrives()
         {
             LocalDrives.Clear();
-            NetworkDrives.Clear();
 
             var localDrives = _detector.DetectLocalNtfsDrives();
             foreach (var drive in localDrives)
@@ -393,25 +390,6 @@ namespace TNDexplorer.ViewModels
                     IsSelected = existing?.Enabled ?? true,
                 });
             }
-
-            var networkDrives = _detector.DetectMappedDrives();
-            foreach (var drive in networkDrives)
-            {
-                var existing = _settings.NetworkDrives?.FirstOrDefault(
-                    d => d.DriveLetter == drive.DriveLetter);
-
-                NetworkDrives.Add(new DriveSelectionItem
-                {
-                    DriveLetter = drive.DriveLetter,
-                    DisplayName = drive.DisplayName,
-                    SizeInfo = drive.SizeDisplay,
-                    UncPath = drive.UncPath,
-                    IsNetwork = true,
-                    IsSelected = existing?.Enabled ?? false,
-                });
-            }
-
-            OnPropertyChanged(nameof(HasNetworkDrives));
         }
 
         private void Save()
@@ -419,13 +397,6 @@ namespace TNDexplorer.ViewModels
             _settings.LocalDrives = LocalDrives.Select(d => new DriveSettings
             {
                 DriveLetter = d.DriveLetter,
-                Enabled = d.IsSelected,
-            }).ToList();
-
-            _settings.NetworkDrives = NetworkDrives.Select(d => new NetworkDriveSettings
-            {
-                DriveLetter = d.DriveLetter,
-                UncPath = d.UncPath,
                 Enabled = d.IsSelected,
             }).ToList();
 

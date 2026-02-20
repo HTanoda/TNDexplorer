@@ -40,6 +40,8 @@ namespace TNDexplorer.Core
 
         // Track network drive assignments for rescan
         private readonly Dictionary<string, byte> _networkDriveIndexMap = new Dictionary<string, byte>();
+        // Track custom folder assignments for rescan
+        private readonly Dictionary<string, byte> _customFolderIndexMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private AppSettings _currentSettings;
         private Timer _rescanTimer;
 
@@ -93,7 +95,7 @@ namespace TNDexplorer.Core
                         settings.ExcludePatterns, _cts.Token)));
                 }
 
-                // Index custom folders (filesystem enumeration, like network drives)
+                // Index custom folders (filesystem enumeration, with cache support)
                 var customFolderTasks = new List<Task>();
                 if (settings.CustomFolders != null)
                 {
@@ -106,9 +108,10 @@ namespace TNDexplorer.Core
                         // Use folder path as a pseudo drive letter
                         string pseudoDrive = folder.FolderPath;
                         _index.SetDriveLetter(driveIndex, pseudoDrive);
+                        _customFolderIndexMap[folder.FolderPath] = driveIndex;
 
                         string rootPath = folder.FolderPath;
-                        customFolderTasks.Add(Task.Run(() => IndexCustomFolder(
+                        customFolderTasks.Add(Task.Run(() => IndexCustomFolderWithCache(
                             rootPath, driveIndex,
                             settings.ExcludePatterns, _cts.Token)));
                     }
@@ -123,13 +126,8 @@ namespace TNDexplorer.Core
                 _ = _driveDetector.MonitorDriveChanges(OnDriveChanged,
                     TimeSpan.FromSeconds(30), _cts.Token);
 
-                // Start periodic network rescan if configured
-                if (settings.NetworkRescanIntervalMinutes > 0
-                    && settings.NetworkDrives.Any(d => d.Enabled))
-                {
-                    int intervalMs = settings.NetworkRescanIntervalMinutes * 60 * 1000;
-                    _rescanTimer = new Timer(OnRescanTimerTick, null, intervalMs, intervalMs);
-                }
+                // Start periodic rescan if configured (applies to both network drives AND custom folders)
+                StartRescanTimer(settings);
 
                 // Initialize TextExtractor for content search (grep-style)
                 InitializeTextExtractor(settings);
@@ -138,6 +136,18 @@ namespace TNDexplorer.Core
             {
                 State = IndexingState.Error;
                 RaiseProgress($"エラー: {ex.Message}", _index.TotalCount, IndexingState.Error);
+            }
+        }
+
+        private void StartRescanTimer(AppSettings settings)
+        {
+            bool hasNetworkDrives = settings.NetworkDrives.Any(d => d.Enabled);
+            bool hasCustomFolders = settings.CustomFolders != null && settings.CustomFolders.Any(f => f.Enabled);
+
+            if (settings.NetworkRescanIntervalMinutes > 0 && (hasNetworkDrives || hasCustomFolders))
+            {
+                int intervalMs = settings.NetworkRescanIntervalMinutes * 60 * 1000;
+                _rescanTimer = new Timer(OnRescanTimerTick, null, intervalMs, intervalMs);
             }
         }
 
@@ -336,7 +346,79 @@ namespace TNDexplorer.Core
             }
         }
 
-        private void IndexCustomFolder(string rootPath, byte driveIndex,
+        /// <summary>
+        /// Index a custom folder with cache support (same pattern as network drives).
+        /// Uses the folder path as the cache key.
+        /// </summary>
+        private void IndexCustomFolderWithCache(string rootPath, byte driveIndex,
+            IReadOnlyList<string> excludePatterns, CancellationToken ct)
+        {
+            string cacheKey = GetCustomFolderCacheKey(rootPath);
+
+            // Check cache freshness
+            var cacheTimestamp = _networkCache.GetCacheTimestamp(cacheKey);
+            bool cacheIsFresh = false;
+
+            if (cacheTimestamp.HasValue)
+            {
+                var cacheAge = DateTime.Now - cacheTimestamp.Value;
+
+                if (cacheAge > MaxCacheAge)
+                {
+                    RaiseProgress($"{rootPath} キャッシュが古いため再スキャンします...", _index.TotalCount, IndexingState.Indexing);
+                    _networkCache.Delete(cacheKey);
+                    IndexCustomFolder(rootPath, cacheKey, driveIndex, excludePatterns, ct);
+                    return;
+                }
+
+                if (cacheAge <= FreshCacheThreshold)
+                {
+                    cacheIsFresh = true;
+                }
+            }
+
+            // Try loading from cache
+            var cached = _networkCache.Load(cacheKey);
+            if (cached != null && cached.Count > 0)
+            {
+                RaiseProgress($"{rootPath} キャッシュから読み込み中...", _index.TotalCount, IndexingState.Indexing);
+
+                var entries = new List<FileEntry>();
+                foreach (var c in cached)
+                {
+                    var flags = FileEntryFlags.Network;
+                    if (c.IsDir) flags |= FileEntryFlags.Directory;
+
+                    entries.Add(new FileEntry
+                    {
+                        FileReferenceNumber = c.FRN,
+                        ParentFileReferenceNumber = c.ParentFRN,
+                        Name = c.Name,
+                        Size = c.Size,
+                        ModifiedDate = c.Modified,
+                        Flags = flags,
+                        DriveIndex = driveIndex,
+                    });
+                }
+
+                _index.AddEntries(driveIndex, entries);
+                RaiseProgress(
+                    $"{rootPath} キャッシュ読込完了 ({entries.Count:N0} 件)",
+                    _index.TotalCount,
+                    IndexingState.Indexing);
+
+                if (!cacheIsFresh)
+                {
+                    Task.Run(() => RescanCustomFolder(rootPath, cacheKey, driveIndex, excludePatterns, ct));
+                }
+                return;
+            }
+
+            // No cache: full scan
+            IndexCustomFolder(rootPath, cacheKey, driveIndex, excludePatterns, ct);
+        }
+
+        private void IndexCustomFolder(string rootPath, string cacheKey, byte driveIndex,
             IReadOnlyList<string> excludePatterns, CancellationToken ct)
         {
             RaiseProgress($"{rootPath} をスキャン中...", _index.TotalCount, IndexingState.Indexing);
@@ -357,6 +439,9 @@ namespace TNDexplorer.Core
                 var entries = scanner.ScanDrive(rootWithSlash, driveIndex, excludePatterns, ct, progress);
                 _index.AddEntries(driveIndex, entries);
 
+                // Save to cache
+                _networkCache.Save(cacheKey, entries);
+
                 RaiseProgress(
                     $"{rootPath} 完了 ({entries.Count:N0} 件)",
                     _index.TotalCount,
@@ -371,11 +456,49 @@ namespace TNDexplorer.Core
             }
         }
 
+        private void RescanCustomFolder(string rootPath, string cacheKey, byte driveIndex,
+            IReadOnlyList<string> excludePatterns, CancellationToken ct)
+        {
+            var scanner = new NetworkDriveScanner();
+
+            try
+            {
+                string rootWithSlash = rootPath.EndsWith("\\") ? rootPath : rootPath + "\\";
+                var entries = scanner.ScanDrive(rootWithSlash, driveIndex, excludePatterns, ct);
+
+                _index.RemoveEntriesForDrive(driveIndex);
+                _index.AddEntries(driveIndex, entries);
+
+                _networkCache.Save(cacheKey, entries);
+
+                RaiseProgress(
+                    $"{rootPath} リスキャン完了 ({entries.Count:N0} 件)",
+                    _index.TotalCount,
+                    IndexingState.Ready);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Custom folder rescan failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Generate a safe cache key for a custom folder path.
+        /// Uses "CF_" prefix + sanitized path to avoid collision with network drive cache keys.
+        /// </summary>
+        private static string GetCustomFolderCacheKey(string folderPath)
+        {
+            // Sanitize path for use as filename: replace \ / : with _
+            string safe = folderPath.Replace("\\", "_").Replace("/", "_").Replace(":", "_");
+            return "CF_" + safe;
+        }
+
         private void OnRescanTimerTick(object state)
         {
             if (_cts == null || _cts.IsCancellationRequested) return;
             if (_currentSettings == null) return;
 
+            // Rescan network drives
             foreach (var drive in _currentSettings.NetworkDrives.Where(d => d.Enabled))
             {
                 if (_networkDriveIndexMap.TryGetValue(drive.DriveLetter, out byte driveIndex))
@@ -384,6 +507,22 @@ namespace TNDexplorer.Core
                     Task.Run(() => RescanNetworkDrive(
                         rootPath, drive.DriveLetter, driveIndex,
                         _currentSettings.ExcludePatterns, _cts.Token));
+                }
+            }
+
+            // Rescan custom folders
+            if (_currentSettings.CustomFolders != null)
+            {
+                foreach (var folder in _currentSettings.CustomFolders.Where(f => f.Enabled))
+                {
+                    if (string.IsNullOrWhiteSpace(folder.FolderPath)) continue;
+                    if (_customFolderIndexMap.TryGetValue(folder.FolderPath, out byte driveIndex))
+                    {
+                        string cacheKey = GetCustomFolderCacheKey(folder.FolderPath);
+                        Task.Run(() => RescanCustomFolder(
+                            folder.FolderPath, cacheKey, driveIndex,
+                            _currentSettings.ExcludePatterns, _cts.Token));
+                    }
                 }
             }
         }

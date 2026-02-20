@@ -31,13 +31,7 @@ namespace TNDexplorer.ViewModels
         public ObservableCollection<DriveSelectionItem> LocalDrives { get; }
             = new ObservableCollection<DriveSelectionItem>();
 
-        public ObservableCollection<DriveSelectionItem> NetworkDrives { get; }
-            = new ObservableCollection<DriveSelectionItem>();
-
         public RelayCommand SaveCommand { get; }
-        public RelayCommand RefreshCommand { get; }
-
-        public bool HasNetworkDrives => NetworkDrives.Count > 0;
 
         public SetupWizardViewModel(SettingsService settingsService)
         {
@@ -45,15 +39,13 @@ namespace TNDexplorer.ViewModels
             _settingsService = settingsService;
 
             SaveCommand = new RelayCommand(Save);
-            RefreshCommand = new RelayCommand(DetectDrives);
 
-            DetectDrives();
+            DetectLocalDrives();
         }
 
-        public void DetectDrives()
+        public void DetectLocalDrives()
         {
             LocalDrives.Clear();
-            NetworkDrives.Clear();
 
             var localDrives = _detector.DetectLocalNtfsDrives();
             foreach (var drive in localDrives)
@@ -67,22 +59,6 @@ namespace TNDexplorer.ViewModels
                     IsSelected = true, // All local drives enabled by default
                 });
             }
-
-            var networkDrives = _detector.DetectMappedDrives();
-            foreach (var drive in networkDrives)
-            {
-                NetworkDrives.Add(new DriveSelectionItem
-                {
-                    DriveLetter = drive.DriveLetter,
-                    DisplayName = drive.DisplayName,
-                    SizeInfo = drive.SizeDisplay,
-                    UncPath = drive.UncPath,
-                    IsNetwork = true,
-                    IsSelected = false, // Network drives unchecked by default
-                });
-            }
-
-            OnPropertyChanged(nameof(HasNetworkDrives));
         }
 
         public AppSettings CreateSettings()
@@ -95,12 +71,8 @@ namespace TNDexplorer.ViewModels
                     DriveLetter = d.DriveLetter,
                     Enabled = d.IsSelected,
                 }).ToList(),
-                NetworkDrives = NetworkDrives.Select(d => new NetworkDriveSettings
-                {
-                    DriveLetter = d.DriveLetter,
-                    UncPath = d.UncPath,
-                    Enabled = d.IsSelected,
-                }).ToList(),
+                // Network drives are no longer auto-detected; use custom folders instead
+                NetworkDrives = new System.Collections.Generic.List<NetworkDriveSettings>(),
                 ExcludePatterns = new System.Collections.Generic.List<string>
                 {
                     "$Recycle.Bin",

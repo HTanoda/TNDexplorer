@@ -57,26 +57,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Network Drives -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                            <TextBlock Text="ネットワークドライブ"
-                                       FontSize="14" FontWeight="SemiBold"/>
-                            <Button Content="再検出" Command="{Binding RefreshDrivesCommand}"
-                                    Margin="15,0,0,0" Padding="8,2" FontSize="11"/>
-                        </StackPanel>
-                        <ItemsControl ItemsSource="{Binding NetworkDrives}" Margin="0,0,0,15">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" Width="200"/>
-                                            <TextBlock Text="{Binding UncPath}" Foreground="Gray" Margin="10,0,0,0"/>
-                                        </StackPanel>
-                                    </CheckBox>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
                         <!-- Custom Folders -->
                         <TextBlock Text="フォルダ"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>

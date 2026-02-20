@@ -15,7 +15,7 @@ namespace TNDexplorer.Models
         {
             ContentSearchIncludeFilename = true;
             MaxSearchResults = 100000;
-            NetworkRescanIntervalMinutes = 5;
+            NetworkRescanIntervalMinutes = 60;
             ExcludeHiddenFiles = true;
             ExcludeSystemFiles = true;
             IsFirstRun = true;
@@ -49,7 +49,7 @@ namespace TNDexplorer.Models
         public int MaxSearchResults { get; set; } = 100000;
 
         [DataMember]
-        public int NetworkRescanIntervalMinutes { get; set; } = 5;
+        public int NetworkRescanIntervalMinutes { get; set; } = 60;
 
         [DataMember]
         public bool ExcludeHiddenFiles { get; set; } = true;

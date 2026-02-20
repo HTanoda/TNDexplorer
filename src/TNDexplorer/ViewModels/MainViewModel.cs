@@ -632,6 +632,58 @@ namespace TNDexplorer.ViewModels
                         return;
                     }
 
+                    // Warn if the target folder is a network location (UNC or mapped network drive)
+                    bool isNetworkFolder = false;
+                    string trimmedFolder = _folderPath.TrimEnd('\\', '/');
+                    if (trimmedFolder.StartsWith("\\\\"))
+                    {
+                        isNetworkFolder = true;
+                    }
+                    else if (trimmedFolder.Length >= 2 && trimmedFolder[1] == ':')
+                    {
+                        string drv = trimmedFolder.Substring(0, 2);
+                        try
+                        {
+                            var driveInfo = new System.IO.DriveInfo(drv);
+                            if (driveInfo.DriveType == System.IO.DriveType.Network)
+                                isNetworkFolder = true;
+                        }
+                        catch { }
+                        if (!isNetworkFolder)
+                        {
+                            // Also check via WNetGetConnection (mapped drives may not report as Network via DriveInfo)
+                            string unc = Core.NetworkDriveDetector.GetUncPath(drv);
+                            if (!string.IsNullOrEmpty(unc))
+                                isNetworkFolder = true;
+                        }
+                    }
+
+                    if (isNetworkFolder)
+                    {
+                        bool proceed = false;
+                        _dispatcher.Invoke(() =>
+                        {
+                            var result = System.Windows.MessageBox.Show(
+                                "内容検索の対象フォルダがネットワーク上のフォルダです。\n\n" +
+                                "内容検索はファイルの中身を直接読み取るため、ネットワーク越しの\n" +
+                                "検索はファイルサーバーに大きな負荷がかかる場合があります。\n\n" +
+                                "検索対象のフォルダ範囲はできるだけ絞って指定してください。\n\n" +
+                                "このまま内容検索を実行しますか？",
+                                "内容検索 - ネットワークフォルダの注意",
+                                System.Windows.MessageBoxButton.YesNo,
+                                System.Windows.MessageBoxImage.Warning);
+                            proceed = (result == System.Windows.MessageBoxResult.Yes);
+                        });
+                        if (!proceed)
+                        {
+                            _dispatcher.Invoke(() =>
+                            {
+                                StatusText = "内容検索: キャンセルされました";
+                            });
+                            return;
+                        }
+                    }
+
                     _dispatcher.Invoke(() =>
                     {
                         StatusText = "内容検索中...";
@@ -642,7 +694,10 @@ namespace TNDexplorer.ViewModels
                     {
                         _dispatcher.BeginInvoke(new Action(() =>
                         {
-                            FullTextStatus = $"内容検索: {p.ScannedFiles:N0}/{p.TotalFiles:N0} 件スキャン中... ({p.MatchedFiles:N0} 件ヒット)";
+                            if (p.IsCompleted)
+                                FullTextStatus = $"内容検索完了: {p.TotalFiles:N0} 件スキャン、{p.MatchedFiles:N0} 件ヒット";
+                            else
+                                FullTextStatus = $"内容検索: {p.ScannedFiles:N0}/{p.TotalFiles:N0} 件スキャン中... ({p.MatchedFiles:N0} 件ヒット)";
                         }));
                     });
 
@@ -674,6 +729,7 @@ namespace TNDexplorer.ViewModels
                         }
                     }
 
+                    // Update final status with merged result count (content + filename matches)
                     _dispatcher.BeginInvoke(new Action(() =>
                     {
                         FullTextStatus = $"内容検索完了: {results.Count:N0} 件ヒット";

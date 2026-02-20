@@ -31,6 +31,7 @@ namespace TNDexplorer.Core
         public int ScannedFiles { get; set; }
         public int TotalFiles { get; set; }
         public int MatchedFiles { get; set; }
+        public bool IsCompleted { get; set; }
     }
 
     public class SearchEngine
@@ -255,8 +256,14 @@ namespace TNDexplorer.Core
                         staThread.Join();
                     }
 
-                    // Final progress report
-                    ReportProgress(progress, scannedCount, totalFiles, matchedCount);
+                    // Final progress report (mark as completed)
+                    progress?.Report(new ContentSearchProgress
+                    {
+                        ScannedFiles = scannedCount,
+                        TotalFiles = totalFiles,
+                        MatchedFiles = matchedCount,
+                        IsCompleted = true,
+                    });
 
                     return results.Take(maxResults).ToList();
                 }, ct).ConfigureAwait(false);
@@ -278,7 +285,41 @@ namespace TNDexplorer.Core
             if (allEntries == null) return targets;
 
             string folderFilter = opts.FolderPath?.TrimEnd('\\', '/') ?? "";
+            string folderFilterAlt = null;
             bool includeSubfolders = opts.IncludeSubfolders;
+
+            // Resolve drive letter -> UNC path (or vice versa) for folder filter matching
+            if (!string.IsNullOrEmpty(folderFilter))
+            {
+                if (folderFilter.Length >= 2 && folderFilter[1] == ':')
+                {
+                    string driveLetter = folderFilter.Substring(0, 2);
+                    string uncBase = NetworkDriveDetector.GetUncPath(driveLetter);
+                    if (!string.IsNullOrEmpty(uncBase))
+                    {
+                        string remainder = folderFilter.Length > 2 ? folderFilter.Substring(2) : "";
+                        folderFilterAlt = uncBase.TrimEnd('\\') + remainder;
+                    }
+                }
+                else if (folderFilter.StartsWith("\\\\"))
+                {
+                    for (char c = 'A'; c <= 'Z'; c++)
+                    {
+                        string drv = c + ":";
+                        string uncBase = NetworkDriveDetector.GetUncPath(drv);
+                        if (!string.IsNullOrEmpty(uncBase))
+                        {
+                            string uncNorm = uncBase.TrimEnd('\\');
+                            if (folderFilter.StartsWith(uncNorm, StringComparison.OrdinalIgnoreCase))
+                            {
+                                string remainder = folderFilter.Substring(uncNorm.Length);
+                                folderFilterAlt = drv + remainder;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
 
             // Parse extension filter from advanced options (user's per-search filter)
             HashSet<string> extFilter = null;
@@ -351,16 +392,18 @@ namespace TNDexplorer.Core
 
                 if (!string.IsNullOrEmpty(folderFilter))
                 {
+                    bool folderMatch;
                     if (includeSubfolders)
                     {
-                        if (!dirPath.StartsWith(folderFilter, StringComparison.OrdinalIgnoreCase))
-                            continue;
+                        folderMatch = dirPath.StartsWith(folderFilter, StringComparison.OrdinalIgnoreCase)
+                            || (folderFilterAlt != null && dirPath.StartsWith(folderFilterAlt, StringComparison.OrdinalIgnoreCase));
                     }
                     else
                     {
-                        if (!dirPath.Equals(folderFilter, StringComparison.OrdinalIgnoreCase))
-                            continue;
+                        folderMatch = dirPath.Equals(folderFilter, StringComparison.OrdinalIgnoreCase)
+                            || (folderFilterAlt != null && dirPath.Equals(folderFilterAlt, StringComparison.OrdinalIgnoreCase));
                     }
+                    if (!folderMatch) continue;
                 }
 
                 // Date check

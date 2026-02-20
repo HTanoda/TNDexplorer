@@ -37,31 +37,16 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Network Drives -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,5,0,5">
-            <TextBlock Text="ネットワークドライブ"
-                       FontSize="14" FontWeight="SemiBold"/>
-            <Button Content="再検出" Command="{Binding RefreshCommand}"
-                    Margin="15,0,0,0" Padding="8,2" FontSize="11"/>
-        </StackPanel>
+        <!-- Network / Shared folder note -->
+        <TextBlock Grid.Row="3" Text="ネットワークドライブ・共有フォルダ"
+                   FontSize="14" FontWeight="SemiBold" Margin="0,5,0,5"/>
 
         <Grid Grid.Row="4" Margin="0,0,0,10">
-            <ItemsControl ItemsSource="{Binding NetworkDrives}"
-                          Visibility="{Binding HasNetworkDrives, Converter={StaticResource BoolToVisibility}}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" Width="200"/>
-                                <TextBlock Text="{Binding UncPath}" Foreground="Gray" Margin="10,0,0,0"/>
-                            </StackPanel>
-                        </CheckBox>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBlock Text="マウントされたネットワークドライブが見つかりません"
-                       Foreground="Gray" FontStyle="Italic" VerticalAlignment="Top"
-                       Visibility="{Binding HasNetworkDrives, Converter={StaticResource BoolToVisibilityInverse}}"/>
+            <TextBlock Foreground="Gray" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top">
+                <Run Text="ネットワークドライブや共有フォルダを検索対象に追加したい場合は、"/>
+                <LineBreak/>
+                <Run Text="起動後に [設定] → [ドライブ] → [フォルダ] から手動で追加できます。"/>
+            </TextBlock>
         </Grid>
 
         <!-- Buttons -->

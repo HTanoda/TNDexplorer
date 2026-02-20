@@ -348,7 +348,11 @@ namespace TNDexplorer.Core
             return drives;
         }
 
-        private static string GetUncPath(string driveLetter)
+        /// <summary>
+        /// Resolve a mapped network drive letter (e.g., "K:") to its UNC path.
+        /// Returns null if the drive is not a network drive or resolution fails.
+        /// </summary>
+        public static string GetUncPath(string driveLetter)
         {
             try
             {

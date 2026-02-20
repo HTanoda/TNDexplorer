@@ -215,9 +215,45 @@ namespace TNDexplorer.Core
 
             // Preprocess folder path filter - normalize
             string folderFilter = null;
+            string folderFilterAlt = null; // Alternative folder filter (UNC path if drive letter, or vice versa)
             if (hasFolderFilter)
             {
                 folderFilter = folderPath.TrimEnd('\\').TrimEnd('/');
+
+                // If the folder path starts with a drive letter (e.g. K:\...),
+                // also try matching via UNC path for mapped network drives
+                if (folderFilter.Length >= 2 && folderFilter[1] == ':')
+                {
+                    string driveLetter = folderFilter.Substring(0, 2); // e.g. "K:"
+                    string uncBase = NetworkDriveDetector.GetUncPath(driveLetter);
+                    if (!string.IsNullOrEmpty(uncBase))
+                    {
+                        // Replace drive letter prefix with UNC path
+                        // e.g. "K:\foo\bar" -> "\\server\share\foo\bar"
+                        string remainder = folderFilter.Length > 2 ? folderFilter.Substring(2) : "";
+                        folderFilterAlt = uncBase.TrimEnd('\\') + remainder;
+                    }
+                }
+                // If the folder path starts with UNC (\\...), also try matching via drive letter
+                else if (folderFilter.StartsWith("\\\\"))
+                {
+                    // Check all mapped drives to find one that maps to this UNC prefix
+                    for (char c = 'A'; c <= 'Z'; c++)
+                    {
+                        string drv = c + ":";
+                        string uncBase = NetworkDriveDetector.GetUncPath(drv);
+                        if (!string.IsNullOrEmpty(uncBase))
+                        {
+                            string uncNorm = uncBase.TrimEnd('\\');
+                            if (folderFilter.StartsWith(uncNorm, StringComparison.OrdinalIgnoreCase))
+                            {
+                                string remainder = folderFilter.Substring(uncNorm.Length);
+                                folderFilterAlt = drv + remainder;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
             // Pre-extract clauses for use in parallel loop
@@ -298,16 +334,18 @@ namespace TNDexplorer.Core
                         if (folderFilter != null)
                         {
                             string entryPath = ResolvePath(entry);
+                            bool folderMatch;
                             if (includeSubfolders)
                             {
-                                if (!entryPath.StartsWith(folderFilter, StringComparison.OrdinalIgnoreCase))
-                                    continue;
+                                folderMatch = entryPath.StartsWith(folderFilter, StringComparison.OrdinalIgnoreCase)
+                                    || (folderFilterAlt != null && entryPath.StartsWith(folderFilterAlt, StringComparison.OrdinalIgnoreCase));
                             }
                             else
                             {
-                                if (!entryPath.Equals(folderFilter, StringComparison.OrdinalIgnoreCase))
-                                    continue;
+                                folderMatch = entryPath.Equals(folderFilter, StringComparison.OrdinalIgnoreCase)
+                                    || (folderFilterAlt != null && entryPath.Equals(folderFilterAlt, StringComparison.OrdinalIgnoreCase));
                             }
+                            if (!folderMatch) continue;
                         }
 
                         results.Add(entry);

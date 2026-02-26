@@ -55,6 +55,11 @@ namespace TNDexplorer.ViewModels
         private bool _alternateRowColors;
         private bool _groupByFiscalYear;
 
+        // Rescan settings
+        private int _rescanModeIndex;
+        private int _dailyRescanHour;
+        private int _dailyRescanMinute;
+
         // Content search settings
         private string _fullTextTargetExtensionsText;
         private long _fullTextMaxFileSizeMB;
@@ -161,6 +166,30 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _groupByFiscalYear, value);
         }
 
+        public int RescanModeIndex
+        {
+            get => _rescanModeIndex;
+            set => SetProperty(ref _rescanModeIndex, value);
+        }
+
+        public int DailyRescanHour
+        {
+            get => _dailyRescanHour;
+            set => SetProperty(ref _dailyRescanHour, value);
+        }
+
+        public int DailyRescanMinute
+        {
+            get => _dailyRescanMinute;
+            set => SetProperty(ref _dailyRescanMinute, value);
+        }
+
+        /// <summary>
+        /// Callback to trigger manual rescan from the settings dialog.
+        /// Set by App.xaml.cs before showing the dialog.
+        /// </summary>
+        public Action ManualRescanAction { get; set; }
+
         public string FullTextTargetExtensionsText
         {
             get => _fullTextTargetExtensionsText;
@@ -203,6 +232,11 @@ namespace TNDexplorer.ViewModels
             ExcludePatternsText = string.Join("\n", _settings.ExcludePatterns ?? Enumerable.Empty<string>());
             AlternateRowColors = _settings.AlternateRowColors;
             GroupByFiscalYear = _settings.GroupByFiscalYear;
+
+            // Rescan settings
+            RescanModeIndex = (int)_settings.RescanMode;
+            DailyRescanHour = _settings.DailyRescanHour;
+            DailyRescanMinute = _settings.DailyRescanMinute;
 
             // Content search settings
             FullTextMaxFileSizeMB = _settings.FullTextMaxFileSizeMB;
@@ -430,6 +464,11 @@ namespace TNDexplorer.ViewModels
             // Save display settings
             _settings.AlternateRowColors = AlternateRowColors;
             _settings.GroupByFiscalYear = GroupByFiscalYear;
+
+            // Save rescan settings
+            _settings.RescanMode = (RescanMode)RescanModeIndex;
+            _settings.DailyRescanHour = DailyRescanHour;
+            _settings.DailyRescanMinute = DailyRescanMinute;
 
             // Save content search settings
             _settings.FullTextMaxFileSizeMB = FullTextMaxFileSizeMB;

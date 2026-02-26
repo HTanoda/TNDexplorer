@@ -10,6 +10,7 @@
 
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <converters:IntToBoolConverter x:Key="IntToBool"/>
     </Window.Resources>
 
     <Grid Margin="10">
@@ -90,11 +91,43 @@
                                 <TextBlock Text="最大検索結果数:" VerticalAlignment="Center" Width="170"/>
                                 <TextBox Text="{Binding MaxSearchResults}" Width="100"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,3">
-                                <TextBlock Text="NWリスキャン間隔 (分):" VerticalAlignment="Center" Width="170"/>
-                                <TextBox Text="{Binding NetworkRescanIntervalMinutes}" Width="100"/>
-                                <TextBlock Text="(0 = リスキャンしない)" Foreground="Gray" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11"/>
+                        </StackPanel>
+
+                        <!-- Rescan Settings -->
+                        <TextBlock Text="リスキャン設定"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                        <TextBlock Text="ネットワークドライブ・カスタムフォルダのインデックスを更新するタイミングを設定します。"
+                                   FontSize="11" Foreground="Gray" Margin="0,0,0,5"/>
+                        <StackPanel Margin="5,0,0,15">
+                            <RadioButton Content="1日1回（スケジュール）"
+                                         IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=0}"
+                                         Margin="0,3" GroupName="RescanMode"/>
+                            <StackPanel Orientation="Horizontal" Margin="20,3,0,5">
+                                <TextBlock Text="実行時刻:" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding DailyRescanHour}" Width="40" Margin="8,0,0,0"/>
+                                <TextBlock Text="時" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                <TextBox Text="{Binding DailyRescanMinute}" Width="40" Margin="8,0,0,0"/>
+                                <TextBlock Text="分" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
+
+                            <RadioButton Content="一定間隔でリスキャン"
+                                         IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=1}"
+                                         Margin="0,3" GroupName="RescanMode"/>
+                            <StackPanel Orientation="Horizontal" Margin="20,3,0,5">
+                                <TextBlock Text="間隔:" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding NetworkRescanIntervalMinutes}" Width="60" Margin="8,0,0,0"/>
+                                <TextBlock Text="分" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            </StackPanel>
+
+                            <RadioButton Content="手動のみ（自動リスキャンしない）"
+                                         IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=2}"
+                                         Margin="0,3" GroupName="RescanMode"/>
+
+                            <Button Content="今すぐリスキャン" Padding="12,4" FontSize="12"
+                                    Margin="0,8,0,0" HorizontalAlignment="Left"
+                                    Click="OnManualRescanClick"
+                                    Background="#FF0078D4" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"/>
                         </StackPanel>
 
                         <!-- Hidden / System file exclusion -->

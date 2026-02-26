@@ -44,6 +44,7 @@ namespace TNDexplorer.Core
         private readonly Dictionary<string, byte> _customFolderIndexMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private AppSettings _currentSettings;
         private Timer _rescanTimer;
+        private DateTime? _nextDailyRescanTime;
 
         // Content search (grep-style): TextExtractor for on-demand file reading
         private TextExtractor _textExtractor;
@@ -71,6 +72,10 @@ namespace TNDexplorer.Core
 
             try
             {
+                // Build drive letter ↔ UNC path mapping cache from non-elevated user session.
+                // This must run before indexing so that folder path resolution works correctly.
+                _driveDetector.BuildDriveLetterCache();
+
                 // Index local NTFS drives
                 var localTasks = new List<Task>();
                 foreach (var drive in settings.LocalDrives.Where(d => d.Enabled))
@@ -126,8 +131,8 @@ namespace TNDexplorer.Core
                 _ = _driveDetector.MonitorDriveChanges(OnDriveChanged,
                     TimeSpan.FromSeconds(30), _cts.Token);
 
-                // Start periodic rescan if configured (applies to both network drives AND custom folders)
-                StartRescanTimer(settings);
+                // Start rescan scheduler (Daily / Interval / Manual)
+                StartRescanScheduler(settings);
 
                 // Initialize TextExtractor for content search (grep-style)
                 InitializeTextExtractor(settings);
@@ -139,15 +144,78 @@ namespace TNDexplorer.Core
             }
         }
 
-        private void StartRescanTimer(AppSettings settings)
+        private void StartRescanScheduler(AppSettings settings)
         {
-            bool hasNetworkDrives = settings.NetworkDrives.Any(d => d.Enabled);
-            bool hasCustomFolders = settings.CustomFolders != null && settings.CustomFolders.Any(f => f.Enabled);
+            bool hasTargets = settings.NetworkDrives.Any(d => d.Enabled)
+                || (settings.CustomFolders != null && settings.CustomFolders.Any(f => f.Enabled));
+            if (!hasTargets) return;
 
-            if (settings.NetworkRescanIntervalMinutes > 0 && (hasNetworkDrives || hasCustomFolders))
+            switch (settings.RescanMode)
             {
-                int intervalMs = settings.NetworkRescanIntervalMinutes * 60 * 1000;
-                _rescanTimer = new Timer(OnRescanTimerTick, null, intervalMs, intervalMs);
+                case RescanMode.Daily:
+                    StartDailyScheduler(settings);
+                    break;
+                case RescanMode.Interval:
+                    if (settings.NetworkRescanIntervalMinutes > 0)
+                    {
+                        int intervalMs = settings.NetworkRescanIntervalMinutes * 60 * 1000;
+                        _rescanTimer = new Timer(OnRescanTimerTick, null, intervalMs, intervalMs);
+                    }
+                    break;
+                case RescanMode.Manual:
+                    // No automatic rescan
+                    break;
+            }
+        }
+
+        private void StartDailyScheduler(AppSettings settings)
+        {
+            // Check if we missed today's scheduled rescan
+            CheckMissedDailyRescan(settings);
+
+            // Calculate next execution time
+            _nextDailyRescanTime = CalculateNextDailyRescan(settings.DailyRescanHour, settings.DailyRescanMinute);
+
+            // Check every minute (precision is sufficient, CPU cost negligible)
+            _rescanTimer = new Timer(OnDailyTimerTick, null,
+                TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        }
+
+        private void CheckMissedDailyRescan(AppSettings settings)
+        {
+            if (string.IsNullOrEmpty(settings.LastRescanTimestamp)) return;
+
+            if (DateTime.TryParse(settings.LastRescanTimestamp, null,
+                System.Globalization.DateTimeStyles.RoundtripKind, out DateTime lastRescan))
+            {
+                var todayScheduled = DateTime.Today
+                    .AddHours(settings.DailyRescanHour)
+                    .AddMinutes(settings.DailyRescanMinute);
+
+                // Current time is past today's schedule, but last rescan was before it
+                if (DateTime.Now > todayScheduled && lastRescan < todayScheduled)
+                {
+                    // Execute missed rescan
+                    Task.Run(() => ExecuteRescanAll());
+                }
+            }
+        }
+
+        private static DateTime CalculateNextDailyRescan(int hour, int minute)
+        {
+            var today = DateTime.Today.AddHours(hour).AddMinutes(minute);
+            return DateTime.Now < today ? today : today.AddDays(1);
+        }
+
+        private void OnDailyTimerTick(object state)
+        {
+            if (_cts == null || _cts.IsCancellationRequested) return;
+            if (!_nextDailyRescanTime.HasValue) return;
+
+            if (DateTime.Now >= _nextDailyRescanTime.Value)
+            {
+                _nextDailyRescanTime = _nextDailyRescanTime.Value.AddDays(1);
+                Task.Run(() => ExecuteRescanAll());
             }
         }
 
@@ -207,18 +275,11 @@ namespace TNDexplorer.Core
         /// </summary>
         private static readonly TimeSpan MaxCacheAge = TimeSpan.FromDays(7);
 
-        /// <summary>
-        /// Cache age threshold below which background rescan is skipped at startup.
-        /// If cache was updated within this period, it is considered fresh enough.
-        /// </summary>
-        private static readonly TimeSpan FreshCacheThreshold = TimeSpan.FromHours(1);
-
         private void IndexNetworkDriveWithCache(string rootPath, string driveLetter,
             byte driveIndex, IReadOnlyList<string> excludePatterns, CancellationToken ct)
         {
-            // Check cache freshness before loading
+            // Check cache age before loading
             var cacheTimestamp = _networkCache.GetCacheTimestamp(driveLetter);
-            bool cacheIsFresh = false;
 
             if (cacheTimestamp.HasValue)
             {
@@ -231,12 +292,6 @@ namespace TNDexplorer.Core
                     _networkCache.Delete(driveLetter);
                     IndexNetworkDrive(rootPath, driveLetter, driveIndex, excludePatterns, ct);
                     return;
-                }
-
-                // Cache is recent enough to skip immediate background rescan
-                if (cacheAge <= FreshCacheThreshold)
-                {
-                    cacheIsFresh = true;
                 }
             }
 
@@ -270,11 +325,7 @@ namespace TNDexplorer.Core
                     _index.TotalCount,
                     IndexingState.Indexing);
 
-                // Only schedule background rescan if cache is not fresh
-                if (!cacheIsFresh)
-                {
-                    Task.Run(() => RescanNetworkDrive(rootPath, driveLetter, driveIndex, excludePatterns, ct));
-                }
+                // No immediate background rescan — rescan is managed by the scheduler
                 return;
             }
 
@@ -355,9 +406,8 @@ namespace TNDexplorer.Core
         {
             string cacheKey = GetCustomFolderCacheKey(rootPath);
 
-            // Check cache freshness
+            // Check cache age
             var cacheTimestamp = _networkCache.GetCacheTimestamp(cacheKey);
-            bool cacheIsFresh = false;
 
             if (cacheTimestamp.HasValue)
             {
@@ -369,11 +419,6 @@ namespace TNDexplorer.Core
                     _networkCache.Delete(cacheKey);
                     IndexCustomFolder(rootPath, cacheKey, driveIndex, excludePatterns, ct);
                     return;
-                }
-
-                if (cacheAge <= FreshCacheThreshold)
-                {
-                    cacheIsFresh = true;
                 }
             }
 
@@ -407,10 +452,7 @@ namespace TNDexplorer.Core
                     _index.TotalCount,
                     IndexingState.Indexing);
 
-                if (!cacheIsFresh)
-                {
-                    Task.Run(() => RescanCustomFolder(rootPath, cacheKey, driveIndex, excludePatterns, ct));
-                }
+                // No immediate background rescan — rescan is managed by the scheduler
                 return;
             }
 
@@ -495,8 +537,22 @@ namespace TNDexplorer.Core
 
         private void OnRescanTimerTick(object state)
         {
+            ExecuteRescanAll();
+        }
+
+        /// <summary>
+        /// Execute a full rescan of all network drives and custom folders.
+        /// Used by both the scheduler (Daily/Interval) and manual rescan.
+        /// Updates LastRescanTimestamp and saves settings after completion.
+        /// </summary>
+        private void ExecuteRescanAll()
+        {
             if (_cts == null || _cts.IsCancellationRequested) return;
             if (_currentSettings == null) return;
+
+            RaiseProgress("リスキャン実行中...", _index.TotalCount, IndexingState.Indexing);
+
+            var tasks = new List<Task>();
 
             // Rescan network drives
             foreach (var drive in _currentSettings.NetworkDrives.Where(d => d.Enabled))
@@ -504,9 +560,9 @@ namespace TNDexplorer.Core
                 if (_networkDriveIndexMap.TryGetValue(drive.DriveLetter, out byte driveIndex))
                 {
                     string rootPath = drive.DriveLetter + "\\";
-                    Task.Run(() => RescanNetworkDrive(
+                    tasks.Add(Task.Run(() => RescanNetworkDrive(
                         rootPath, drive.DriveLetter, driveIndex,
-                        _currentSettings.ExcludePatterns, _cts.Token));
+                        _currentSettings.ExcludePatterns, _cts.Token)));
                 }
             }
 
@@ -519,12 +575,36 @@ namespace TNDexplorer.Core
                     if (_customFolderIndexMap.TryGetValue(folder.FolderPath, out byte driveIndex))
                     {
                         string cacheKey = GetCustomFolderCacheKey(folder.FolderPath);
-                        Task.Run(() => RescanCustomFolder(
+                        tasks.Add(Task.Run(() => RescanCustomFolder(
                             folder.FolderPath, cacheKey, driveIndex,
-                            _currentSettings.ExcludePatterns, _cts.Token));
+                            _currentSettings.ExcludePatterns, _cts.Token)));
                     }
                 }
             }
+
+            try
+            {
+                Task.WaitAll(tasks.ToArray());
+            }
+            catch (AggregateException)
+            {
+                // Individual rescan errors are already handled in RescanNetworkDrive/RescanCustomFolder
+            }
+
+            // Update timestamp and persist
+            _currentSettings.LastRescanTimestamp = DateTime.Now.ToString("o");
+            try { _settingsService.Save(_currentSettings); } catch { }
+
+            RaiseProgress("リスキャン完了", _index.TotalCount, IndexingState.Ready);
+        }
+
+        /// <summary>
+        /// Trigger a manual rescan from the UI ("今すぐリスキャン" button).
+        /// Runs asynchronously in the background.
+        /// </summary>
+        public void RequestManualRescan()
+        {
+            Task.Run(() => ExecuteRescanAll());
         }
 
         private void OnDriveChanged(DriveChangeEvent evt)
@@ -573,12 +653,63 @@ namespace TNDexplorer.Core
             });
         }
 
+        /// <summary>
+        /// Save all network/custom folder caches to disk.
+        /// Called on app exit to ensure cache persistence (Everythingと同様の仕組み).
+        /// </summary>
+        public void SaveAllCaches()
+        {
+            try
+            {
+                // Save network drive caches
+                if (_currentSettings?.NetworkDrives != null)
+                {
+                    foreach (var drive in _currentSettings.NetworkDrives.Where(d => d.Enabled))
+                    {
+                        if (_networkDriveIndexMap.TryGetValue(drive.DriveLetter, out byte driveIndex))
+                        {
+                            var entries = _index.GetEntriesForDrive(driveIndex);
+                            if (entries.Count > 0)
+                            {
+                                _networkCache.Save(drive.DriveLetter, entries);
+                            }
+                        }
+                    }
+                }
+
+                // Save custom folder caches
+                if (_currentSettings?.CustomFolders != null)
+                {
+                    foreach (var folder in _currentSettings.CustomFolders.Where(f => f.Enabled))
+                    {
+                        if (string.IsNullOrWhiteSpace(folder.FolderPath)) continue;
+                        if (_customFolderIndexMap.TryGetValue(folder.FolderPath, out byte driveIndex))
+                        {
+                            var entries = _index.GetEntriesForDrive(driveIndex);
+                            if (entries.Count > 0)
+                            {
+                                string cacheKey = GetCustomFolderCacheKey(folder.FolderPath);
+                                _networkCache.Save(cacheKey, entries);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SaveAllCaches failed: {ex.Message}");
+            }
+        }
+
         public void Dispose()
         {
             if (!_disposed)
             {
                 _cts?.Cancel();
                 _rescanTimer?.Dispose();
+
+                // Save caches before disposing (Everythingのアプリ終了時保存と同様)
+                SaveAllCaches();
 
                 foreach (var monitor in _usnMonitors)
                     monitor.Dispose();

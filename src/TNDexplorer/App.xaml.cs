@@ -56,6 +56,7 @@ namespace TNDexplorer
             mainVm.RequestOpenSettings += () =>
             {
                 var settingsVm = new SettingsViewModel(settingsService);
+                settingsVm.ManualRescanAction = () => _indexManager.RequestManualRescan();
                 var settingsDialog = new SettingsDialog
                 {
                     DataContext = settingsVm,

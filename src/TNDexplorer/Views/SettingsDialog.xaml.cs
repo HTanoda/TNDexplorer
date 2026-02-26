@@ -113,6 +113,22 @@ namespace TNDexplorer.Views
             }
         }
 
+        private void OnManualRescanClick(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsViewModel;
+            if (vm?.ManualRescanAction != null)
+            {
+                vm.ManualRescanAction();
+                MessageBox.Show("リスキャンを開始しました。バックグラウンドで実行されます。",
+                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("リスキャンを実行するにはアプリケーションの再起動が必要です。",
+                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         private void OnRemoveCustomFolder(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;

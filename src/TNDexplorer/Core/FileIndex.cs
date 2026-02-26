@@ -117,6 +117,20 @@ namespace TNDexplorer.Core
             InvalidatePathCache(driveIndex, fileReferenceNumber);
         }
 
+        public List<FileEntry> GetEntriesForDrive(byte driveIndex)
+        {
+            lock (_lock)
+            {
+                var result = new List<FileEntry>();
+                for (int i = 0; i < _count; i++)
+                {
+                    if (_entries[i] != null && _entries[i].DriveIndex == driveIndex)
+                        result.Add(_entries[i]);
+                }
+                return result;
+            }
+        }
+
         public void RemoveEntriesForDrive(byte driveIndex)
         {
             lock (_lock)

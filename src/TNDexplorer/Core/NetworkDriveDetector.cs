@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -95,6 +96,90 @@ namespace TNDexplorer.Core
 
     public class NetworkDriveDetector
     {
+        // ===== Static drive letter ↔ UNC path mapping cache =====
+        // Built at startup via non-elevated user token (net use).
+        // Used by GetUncPath() as fallback when WNetGetConnection and registry both fail
+        // (e.g., VBS logon script creates non-persistent mappings invisible to admin token).
+        private static readonly ConcurrentDictionary<string, string> _driveToUncCache
+            = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, string> _uncToDriveCache
+            = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Build the drive letter ↔ UNC path mapping cache by running "net use"
+        /// as the non-elevated (linked) user token. This captures drive mappings
+        /// created by VBS logon scripts that are invisible to the admin-elevated process.
+        /// Call once at app startup.
+        /// </summary>
+        public void BuildDriveLetterCache()
+        {
+            try
+            {
+                var userDrives = ParseNetUseOutputAsUser();
+                foreach (var d in userDrives)
+                {
+                    if (!string.IsNullOrEmpty(d.DriveLetter) && !string.IsNullOrEmpty(d.UncPath))
+                    {
+                        _driveToUncCache[d.DriveLetter] = d.UncPath;
+                        string uncNorm = d.UncPath.TrimEnd('\\');
+                        _uncToDriveCache[uncNorm] = d.DriveLetter;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"BuildDriveLetterCache failed: {ex.Message}");
+            }
+
+            // Also merge results from other detection methods (WMI, DriveInfo, etc.)
+            try
+            {
+                var allDrives = DetectMappedDrives();
+                foreach (var d in allDrives)
+                {
+                    if (!string.IsNullOrEmpty(d.DriveLetter) && !string.IsNullOrEmpty(d.UncPath))
+                    {
+                        _driveToUncCache.TryAdd(d.DriveLetter, d.UncPath);
+                        string uncNorm = d.UncPath.TrimEnd('\\');
+                        _uncToDriveCache.TryAdd(uncNorm, d.DriveLetter);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"BuildDriveLetterCache (DetectMappedDrives) failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Look up a UNC path from the startup-time mapping cache.
+        /// Returns null if not found.
+        /// </summary>
+        public static string GetUncPathFromCache(string driveLetter)
+        {
+            if (string.IsNullOrEmpty(driveLetter))
+                return null;
+
+            // Normalize to "K:" format
+            string key = driveLetter.Length >= 2 ? driveLetter.Substring(0, 2).ToUpper() : driveLetter.ToUpper();
+            _driveToUncCache.TryGetValue(key, out string unc);
+            return unc;
+        }
+
+        /// <summary>
+        /// Look up a drive letter from a UNC path using the startup-time mapping cache.
+        /// Returns null if not found.
+        /// </summary>
+        public static string GetDriveLetterFromCache(string uncPath)
+        {
+            if (string.IsNullOrEmpty(uncPath))
+                return null;
+
+            string uncNorm = uncPath.TrimEnd('\\');
+            _uncToDriveCache.TryGetValue(uncNorm, out string drive);
+            return drive;
+        }
+
         // Win32 API for WNetGetConnection (works even under admin elevation)
         [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
         private static extern int WNetGetConnection(string lpLocalName,
@@ -350,10 +435,15 @@ namespace TNDexplorer.Core
 
         /// <summary>
         /// Resolve a mapped network drive letter (e.g., "K:") to its UNC path.
-        /// Returns null if the drive is not a network drive or resolution fails.
+        /// Tries 3 methods in order:
+        ///   1. WNetGetConnection API (current token's session)
+        ///   2. HKCU\Network registry (persistent mappings)
+        ///   3. Startup-time cache built from non-elevated "net use" (VBS logon script mappings)
+        /// Returns null if the drive is not a network drive or all methods fail.
         /// </summary>
         public static string GetUncPath(string driveLetter)
         {
+            // Method 1: WNetGetConnection (works for drives in current token's session)
             try
             {
                 var sb = new System.Text.StringBuilder(512);
@@ -363,6 +453,46 @@ namespace TNDexplorer.Core
                     return sb.ToString();
             }
             catch { }
+
+            // Method 2: Registry HKCU\Network\{letter}\RemotePath
+            string regResult = GetUncPathFromRegistry(driveLetter);
+            if (regResult != null)
+                return regResult;
+
+            // Method 3: Startup-time cache (populated from non-elevated user's "net use")
+            // Catches VBS logon script mappings that are non-persistent (no HKCU\Network entry)
+            string cacheResult = GetUncPathFromCache(driveLetter);
+            if (cacheResult != null)
+                return cacheResult;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Read UNC path for a drive letter from HKCU\Network\{letter}\RemotePath.
+        /// This works reliably from UAC-elevated processes because HKCU is shared
+        /// between the elevated and non-elevated tokens of the same user.
+        /// </summary>
+        public static string GetUncPathFromRegistry(string driveLetter)
+        {
+            if (string.IsNullOrEmpty(driveLetter) || driveLetter.Length < 1)
+                return null;
+
+            try
+            {
+                char letter = char.ToUpper(driveLetter[0]);
+                if (!char.IsLetter(letter))
+                    return null;
+
+                using (var key = Registry.CurrentUser.OpenSubKey(@"Network\" + letter))
+                {
+                    string remotePath = key?.GetValue("RemotePath")?.ToString();
+                    if (!string.IsNullOrEmpty(remotePath))
+                        return remotePath;
+                }
+            }
+            catch { }
+
             return null;
         }
 

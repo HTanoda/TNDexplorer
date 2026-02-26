@@ -1,58 +1,150 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.Serialization.Json;
 using System.Text;
-using System.Runtime.Serialization;
+using System.Security.Cryptography;
 using TNDexplorer.Core;
 
 namespace TNDexplorer.Services
 {
     /// <summary>
     /// Caches network drive index to local disk for faster startup.
-    /// Stored in %LOCALAPPDATA%\TNDexplorer\cache\
+    /// Stored in %LOCALAPPDATA%\TNDexplorer\cache\ as compact binary files.
+    ///
+    /// Binary format (version 1):
+    ///   Header (16 bytes):
+    ///     [Magic: 4 bytes] "TNDc"
+    ///     [Version: 2 bytes] uint16 LE = 1
+    ///     [EntryCount: 4 bytes] uint32 LE
+    ///     [Reserved: 6 bytes] zeros
+    ///   Per-entry (35 + nameLen bytes):
+    ///     [FRN: 8 bytes] uint64 LE
+    ///     [ParentFRN: 8 bytes] uint64 LE
+    ///     [Size: 8 bytes] int64 LE
+    ///     [Modified: 8 bytes] int64 LE (DateTime.ToBinary())
+    ///     [Flags: 1 byte] (bit 0 = IsDir)
+    ///     [NameLen: 2 bytes] uint16 LE (UTF-8 byte count)
+    ///     [Name: NameLen bytes] UTF-8
     /// </summary>
     public class NetworkIndexCache
     {
         private readonly string _cacheDir;
+        private readonly string _logPath;
+
+        private static readonly byte[] Magic = { (byte)'T', (byte)'N', (byte)'D', (byte)'c' };
+        private const ushort FormatVersion = 1;
+
+        /// <summary>
+        /// Maximum cache file path length allowed (leave margin below MAX_PATH 260).
+        /// </summary>
+        private const int MaxCachePathLength = 240;
 
         public NetworkIndexCache()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             _cacheDir = Path.Combine(appData, "TNDexplorer", "cache");
+            _logPath = Path.Combine(appData, "TNDexplorer", "cache_error.log");
         }
 
-        private string GetCachePath(string driveLetter)
+        private string GetCachePath(string cacheKey)
         {
-            string safeName = driveLetter.Replace(":", "").Replace("\\", "");
-            return Path.Combine(_cacheDir, $"nw_index_{safeName}.json");
+            string safeName = cacheKey.Replace(":", "").Replace("\\", "").Replace("/", "");
+            string candidate = Path.Combine(_cacheDir, $"nw_index_{safeName}.bin");
+
+            if (candidate.Length > MaxCachePathLength)
+            {
+                string hash = ComputeHash(cacheKey);
+                string prefix = safeName.Length > 30 ? safeName.Substring(0, 30) : safeName;
+                candidate = Path.Combine(_cacheDir, $"nw_index_{prefix}_{hash}.bin");
+            }
+
+            return candidate;
         }
 
-        public List<CachedFileEntry> Load(string driveLetter)
+        private static string ComputeHash(string input)
         {
-            string path = GetCachePath(driveLetter);
+            using (var sha = SHA256.Create())
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(input);
+                byte[] hash = sha.ComputeHash(bytes);
+                var sb = new StringBuilder(24);
+                for (int i = 0; i < 12; i++)
+                    sb.Append(hash[i].ToString("x2"));
+                return sb.ToString();
+            }
+        }
+
+        public List<CachedFileEntry> Load(string cacheKey)
+        {
+            string path = GetCachePath(cacheKey);
             if (!File.Exists(path))
                 return null;
 
             try
             {
-                byte[] json = File.ReadAllBytes(path);
-                using (var stream = new MemoryStream(json))
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
+                using (var reader = new BinaryReader(fs, Encoding.UTF8))
                 {
-                    var serializer = new DataContractJsonSerializer(typeof(NetworkIndexCacheData));
-                    var data = (NetworkIndexCacheData)serializer.ReadObject(stream);
-                    return data?.Entries;
+                    // Read and validate header
+                    byte[] magic = reader.ReadBytes(4);
+                    if (magic.Length < 4 || magic[0] != Magic[0] || magic[1] != Magic[1]
+                        || magic[2] != Magic[2] || magic[3] != Magic[3])
+                    {
+                        throw new InvalidDataException("Invalid cache file: bad magic bytes");
+                    }
+
+                    ushort version = reader.ReadUInt16();
+                    if (version != FormatVersion)
+                    {
+                        throw new InvalidDataException($"Unsupported cache version: {version}");
+                    }
+
+                    uint entryCount = reader.ReadUInt32();
+                    reader.ReadBytes(6); // Reserved
+
+                    if (entryCount > 10_000_000)
+                    {
+                        throw new InvalidDataException($"Entry count too large: {entryCount}");
+                    }
+
+                    var entries = new List<CachedFileEntry>((int)entryCount);
+
+                    for (uint i = 0; i < entryCount; i++)
+                    {
+                        ulong frn = reader.ReadUInt64();
+                        ulong parentFrn = reader.ReadUInt64();
+                        long size = reader.ReadInt64();
+                        long modifiedBinary = reader.ReadInt64();
+                        byte flags = reader.ReadByte();
+                        ushort nameLen = reader.ReadUInt16();
+
+                        byte[] nameBytes = reader.ReadBytes(nameLen);
+                        string name = Encoding.UTF8.GetString(nameBytes);
+
+                        entries.Add(new CachedFileEntry
+                        {
+                            FRN = frn,
+                            ParentFRN = parentFrn,
+                            Name = name,
+                            Size = size,
+                            Modified = DateTime.FromBinary(modifiedBinary),
+                            IsDir = (flags & 0x01) != 0,
+                        });
+                    }
+
+                    return entries;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                LogError("Load", cacheKey, ex);
                 return null;
             }
         }
 
-        public DateTime? GetCacheTimestamp(string driveLetter)
+        public DateTime? GetCacheTimestamp(string cacheKey)
         {
-            string path = GetCachePath(driveLetter);
+            string path = GetCachePath(cacheKey);
             if (!File.Exists(path))
                 return null;
 
@@ -66,78 +158,108 @@ namespace TNDexplorer.Services
             }
         }
 
-        public void Save(string driveLetter, List<FileEntry> entries)
+        public void Save(string cacheKey, List<FileEntry> entries)
         {
             try
             {
                 if (!Directory.Exists(_cacheDir))
                     Directory.CreateDirectory(_cacheDir);
 
-                var data = new NetworkIndexCacheData
-                {
-                    Entries = new List<CachedFileEntry>()
-                };
+                string path = GetCachePath(cacheKey);
+                string tempPath = path + ".tmp";
 
-                foreach (var e in entries)
+                try
                 {
-                    data.Entries.Add(new CachedFileEntry
+                    using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+                    using (var writer = new BinaryWriter(fs, Encoding.UTF8))
                     {
-                        FRN = e.FileReferenceNumber,
-                        ParentFRN = e.ParentFileReferenceNumber,
-                        Name = e.Name,
-                        Size = e.Size,
-                        Modified = e.ModifiedDate,
-                        IsDir = e.IsDirectory,
-                    });
-                }
+                        // Write header
+                        writer.Write(Magic);
+                        writer.Write(FormatVersion);
+                        writer.Write((uint)entries.Count);
+                        writer.Write(new byte[6]); // Reserved
 
-                string path = GetCachePath(driveLetter);
-                using (var stream = new MemoryStream())
+                        // Write entries
+                        foreach (var e in entries)
+                        {
+                            writer.Write(e.FileReferenceNumber);
+                            writer.Write(e.ParentFileReferenceNumber);
+                            writer.Write(e.Size);
+                            writer.Write(e.ModifiedDate.ToBinary());
+
+                            byte flags = 0;
+                            if (e.IsDirectory) flags |= 0x01;
+                            writer.Write(flags);
+
+                            byte[] nameBytes = Encoding.UTF8.GetBytes(e.Name ?? string.Empty);
+                            writer.Write((ushort)nameBytes.Length);
+                            writer.Write(nameBytes);
+                        }
+
+                        writer.Flush();
+                        fs.Flush(true);
+                    }
+
+                    // Atomic replace
+                    if (File.Exists(path))
+                        File.Delete(path);
+                    File.Move(tempPath, path);
+                }
+                finally
                 {
-                    var serializer = new DataContractJsonSerializer(typeof(NetworkIndexCacheData));
-                    serializer.WriteObject(stream, data);
-                    File.WriteAllBytes(path, stream.ToArray());
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+                    catch { }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to save network cache: {ex.Message}");
+                LogError("Save", cacheKey, ex);
             }
         }
 
-        public void Delete(string driveLetter)
+        public void Delete(string cacheKey)
         {
             try
             {
-                string path = GetCachePath(driveLetter);
+                string path = GetCachePath(cacheKey);
                 if (File.Exists(path))
                     File.Delete(path);
             }
             catch { }
         }
+
+        private void LogError(string operation, string cacheKey, Exception ex)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_logPath);
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                string message = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {operation} failed for '{cacheKey}': {ex.GetType().Name}: {ex.Message}\r\n";
+                if (ex.InnerException != null)
+                    message += $"  Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}\r\n";
+                message += $"  StackTrace: {ex.StackTrace}\r\n";
+
+                File.AppendAllText(_logPath, message, Encoding.UTF8);
+            }
+            catch
+            {
+                System.Diagnostics.Debug.WriteLine($"NetworkIndexCache.{operation} failed: {ex.Message}");
+            }
+        }
     }
 
-    [DataContract]
-    public class NetworkIndexCacheData
-    {
-        [DataMember]
-        public List<CachedFileEntry> Entries { get; set; }
-    }
-
-    [DataContract]
+    /// <summary>
+    /// Cached file entry for binary format.
+    /// </summary>
     public class CachedFileEntry
     {
-        [DataMember]
         public ulong FRN { get; set; }
-        [DataMember]
         public ulong ParentFRN { get; set; }
-        [DataMember]
         public string Name { get; set; }
-        [DataMember]
         public long Size { get; set; }
-        [DataMember]
         public DateTime Modified { get; set; }
-        [DataMember]
         public bool IsDir { get; set; }
     }
 }

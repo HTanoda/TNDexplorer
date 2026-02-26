@@ -4,6 +4,14 @@ using System.Runtime.Serialization;
 namespace TNDexplorer.Models
 {
     [DataContract]
+    public enum RescanMode
+    {
+        [EnumMember] Daily = 0,
+        [EnumMember] Interval = 1,
+        [EnumMember] Manual = 2,
+    }
+
+    [DataContract]
     public class AppSettings
     {
         /// <summary>
@@ -24,6 +32,22 @@ namespace TNDexplorer.Models
             WindowLeft = -1;
             WindowTop = -1;
             FullTextMaxFileSizeMB = 50;
+            RescanMode = RescanMode.Daily;
+            DailyRescanHour = 12;
+            DailyRescanMinute = 0;
+        }
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            // Migration from old settings:
+            // If LastRescanTimestamp is null, this is either a fresh install or
+            // an upgrade from a version that didn't have RescanMode.
+            // When the old NetworkRescanIntervalMinutes was 0, the user had disabled rescan.
+            if (LastRescanTimestamp == null && NetworkRescanIntervalMinutes == 0)
+            {
+                RescanMode = RescanMode.Manual;
+            }
         }
 
         [DataMember]
@@ -50,6 +74,18 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public int NetworkRescanIntervalMinutes { get; set; } = 60;
+
+        [DataMember]
+        public RescanMode RescanMode { get; set; } = RescanMode.Daily;
+
+        [DataMember]
+        public int DailyRescanHour { get; set; } = 12;
+
+        [DataMember]
+        public int DailyRescanMinute { get; set; } = 0;
+
+        [DataMember]
+        public string LastRescanTimestamp { get; set; }
 
         [DataMember]
         public bool ExcludeHiddenFiles { get; set; } = true;

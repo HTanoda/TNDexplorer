@@ -98,7 +98,7 @@
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
                         <TextBlock Text="ネットワークドライブ・カスタムフォルダのインデックスを更新するタイミングを設定します。"
                                    FontSize="11" Foreground="Gray" Margin="0,0,0,5"/>
-                        <StackPanel Margin="5,0,0,15">
+                        <StackPanel Margin="5,0,0,10">
                             <RadioButton Content="1日1回（スケジュール）"
                                          IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=0}"
                                          Margin="0,3" GroupName="RescanMode"/>
@@ -110,35 +110,45 @@
                                 <TextBlock Text="分" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
 
-                            <RadioButton Content="一定間隔でリスキャン"
-                                         IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=1}"
-                                         Margin="0,3" GroupName="RescanMode"/>
-                            <StackPanel Orientation="Horizontal" Margin="20,3,0,5">
-                                <TextBlock Text="間隔:" VerticalAlignment="Center"/>
-                                <TextBox Text="{Binding NetworkRescanIntervalMinutes}" Width="60" Margin="8,0,0,0"/>
-                                <TextBlock Text="分" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            </StackPanel>
-
                             <RadioButton Content="手動のみ（自動リスキャンしない）"
                                          IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=2}"
                                          Margin="0,3" GroupName="RescanMode"/>
 
-                            <Button Content="今すぐリスキャン" Padding="12,4" FontSize="12"
-                                    Margin="0,8,0,0" HorizontalAlignment="Left"
-                                    Click="OnManualRescanClick"
-                                    Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand"/>
+                            <!-- Advanced: Interval mode (grayed out when advanced is OFF) -->
+                            <RadioButton Content="一定間隔でリスキャン"
+                                         IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=1}"
+                                         Margin="0,3" GroupName="RescanMode"
+                                         IsEnabled="{Binding IsAdvancedEnabled}"/>
+                            <StackPanel Orientation="Horizontal" Margin="20,3,0,5"
+                                        IsEnabled="{Binding IsAdvancedEnabled}">
+                                <TextBlock Text="間隔:" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding NetworkRescanIntervalMinutes}" Width="60" Margin="8,0,0,0"/>
+                                <TextBlock Text="分（最小180分）" VerticalAlignment="Center" Margin="4,0,0,0"
+                                           Foreground="Gray" FontSize="11"/>
+                            </StackPanel>
                         </StackPanel>
 
-                        <!-- Hidden / System file exclusion -->
-                        <TextBlock Text="フィルタ設定"
-                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <StackPanel Margin="5,0,0,15">
-                            <CheckBox IsChecked="{Binding ExcludeHiddenFiles}" Margin="0,3"
-                                      Content="隠しファイルとフォルダを除外する"/>
-                            <CheckBox IsChecked="{Binding ExcludeSystemFiles}" Margin="0,3"
-                                      Content="システムファイルとフォルダを除外する"/>
-                        </StackPanel>
+                        <!-- Advanced: Hidden/System file scan (grayed out when advanced is OFF) -->
+                        <CheckBox IsChecked="{Binding IncludeHiddenSystemFiles}"
+                                  Content="隠しファイルやシステムファイルもスキャン対象に含める"
+                                  IsEnabled="{Binding IsAdvancedEnabled}"
+                                  Margin="5,0,0,10"
+                                  ToolTip="ONにすると、隠し属性やシステム属性のファイル・フォルダもインデックスに含めます。スキャン時間が大幅に長くなる可能性があります。"/>
+
+                        <!-- Advanced settings toggle button -->
+                        <Button Content="{Binding AdvancedToggleButtonText}"
+                                Padding="12,4" FontSize="12"
+                                Margin="5,0,0,10" HorizontalAlignment="Left"
+                                Click="OnToggleAdvancedSettings"
+                                Background="Transparent" BorderThickness="1" BorderBrush="#FF999999"
+                                Cursor="Hand"/>
+
+                        <!-- Manual rescan button -->
+                        <Button Content="今すぐリスキャン" Padding="12,4" FontSize="12"
+                                Margin="5,0,0,15" HorizontalAlignment="Left"
+                                Click="OnManualRescanClick"
+                                Background="#FF0078D4" Foreground="White" BorderThickness="0"
+                                Cursor="Hand"/>
 
                         <!-- Exclude Patterns -->
                         <TextBlock Text="除外フォルダ (1行に1つ):"

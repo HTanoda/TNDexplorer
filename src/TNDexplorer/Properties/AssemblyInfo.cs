@@ -5,7 +5,7 @@ using System.Windows;
 [assembly: AssemblyTitle("TNDexplorer")]
 [assembly: AssemblyDescription("Ultra-fast file search tool for Windows")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("TND")]
 [assembly: AssemblyProduct("TNDexplorer")]
 [assembly: AssemblyCopyright("Copyright © 2026")]
 [assembly: AssemblyTrademark("")]

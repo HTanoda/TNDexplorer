@@ -156,9 +156,11 @@ namespace TNDexplorer.Core
                     StartDailyScheduler(settings);
                     break;
                 case RescanMode.Interval:
-                    if (settings.NetworkRescanIntervalMinutes > 0)
+                    // Enforce minimum 180 minutes to protect file servers from excessive load
+                    int intervalMinutes = Math.Max(settings.NetworkRescanIntervalMinutes, 180);
+                    if (intervalMinutes > 0)
                     {
-                        int intervalMs = settings.NetworkRescanIntervalMinutes * 60 * 1000;
+                        int intervalMs = intervalMinutes * 60 * 1000;
                         _rescanTimer = new Timer(OnRescanTimerTick, null, intervalMs, intervalMs);
                     }
                     break;
@@ -183,6 +185,9 @@ namespace TNDexplorer.Core
 
         private void CheckMissedDailyRescan(AppSettings settings)
         {
+            // First run (no previous rescan ever recorded): skip.
+            // The user just did a fresh index — triggering an immediate rescan would be wasteful
+            // and could race with the initial scan's cache save operations.
             if (string.IsNullOrEmpty(settings.LastRescanTimestamp)) return;
 
             if (DateTime.TryParse(settings.LastRescanTimestamp, null,
@@ -195,8 +200,14 @@ namespace TNDexplorer.Core
                 // Current time is past today's schedule, but last rescan was before it
                 if (DateTime.Now > todayScheduled && lastRescan < todayScheduled)
                 {
-                    // Execute missed rescan
-                    Task.Run(() => ExecuteRescanAll());
+                    // Delay the missed rescan slightly to ensure all initial cache loads
+                    // have completed (StartRescanScheduler is called after WhenAll, but
+                    // giving an extra buffer avoids edge-case overlaps with SaveAllCaches).
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                        ExecuteRescanAll();
+                    });
                 }
             }
         }

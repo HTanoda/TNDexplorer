@@ -16,6 +16,18 @@ namespace TNDexplorer
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
+            // Handle --uninstall command (before admin check, so it works from "Programs & Features")
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--uninstall", StringComparison.OrdinalIgnoreCase))
+                {
+                    HandleUninstall();
+                    Shutdown();
+                    return;
+                }
+            }
+
             // Auto-elevate to admin (UAC prompt will appear)
             if (!IsRunningAsAdmin())
             {
@@ -23,6 +35,9 @@ namespace TNDexplorer
                 Shutdown();
                 return;
             }
+
+            // Register with Windows "Add/Remove Programs" for asset management tools (AssetView)
+            AppRegistration.EnsureRegistered();
 
             // Prevent shutdown when wizard dialog closes before MainWindow is assigned
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -106,6 +121,31 @@ namespace TNDexplorer
         {
             _indexManager?.Dispose();
             base.OnExit(e);
+        }
+
+        private void HandleUninstall()
+        {
+            var result = MessageBox.Show(
+                "TNDexplorer をアンインストールしますか？\n\n" +
+                "以下の処理を行います:\n" +
+                "・レジストリ登録の解除（プログラムと機能から削除）\n" +
+                "・設定ファイルとキャッシュの削除\n\n" +
+                "※ EXEファイル自体は手動で削除してください。",
+                "TNDexplorer アンインストール",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                AppRegistration.Unregister(deleteUserData: true);
+                MessageBox.Show(
+                    "アンインストールが完了しました。\n\n" +
+                    "EXEファイルは手動で削除してください。",
+                    "完了",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
         }
 
         private static bool IsRunningAsAdmin()

@@ -60,6 +60,10 @@ namespace TNDexplorer.ViewModels
         private int _dailyRescanHour;
         private int _dailyRescanMinute;
 
+        // Advanced settings
+        private bool _isAdvancedEnabled;
+        private bool _includeHiddenSystemFiles;
+
         // Content search settings
         private string _fullTextTargetExtensionsText;
         private long _fullTextMaxFileSizeMB;
@@ -185,6 +189,44 @@ namespace TNDexplorer.ViewModels
         }
 
         /// <summary>
+        /// Whether advanced settings (Interval mode, hidden/system file scan) are enabled.
+        /// Controls UI enable/disable state of advanced options.
+        /// </summary>
+        public bool IsAdvancedEnabled
+        {
+            get => _isAdvancedEnabled;
+            set
+            {
+                if (SetProperty(ref _isAdvancedEnabled, value))
+                {
+                    OnPropertyChanged(nameof(AdvancedToggleButtonText));
+                    if (!value)
+                    {
+                        // Fallback: disable advanced options when turning off
+                        DisableAdvancedSettings();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Button text that changes based on advanced settings state.
+        /// </summary>
+        public string AdvancedToggleButtonText
+            => _isAdvancedEnabled ? "高度な設定を無効にする" : "高度な設定を有効にする";
+
+        /// <summary>
+        /// Combined checkbox: ON = include hidden/system files in scan.
+        /// Maps to ExcludeHiddenFiles=false + ExcludeSystemFiles=false when ON.
+        /// Only editable when IsAdvancedEnabled is true.
+        /// </summary>
+        public bool IncludeHiddenSystemFiles
+        {
+            get => _includeHiddenSystemFiles;
+            set => SetProperty(ref _includeHiddenSystemFiles, value);
+        }
+
+        /// <summary>
         /// Callback to trigger manual rescan from the settings dialog.
         /// Set by App.xaml.cs before showing the dialog.
         /// </summary>
@@ -237,6 +279,14 @@ namespace TNDexplorer.ViewModels
             RescanModeIndex = (int)_settings.RescanMode;
             DailyRescanHour = _settings.DailyRescanHour;
             DailyRescanMinute = _settings.DailyRescanMinute;
+
+            // Advanced settings
+            _isAdvancedEnabled = _settings.AdvancedSettingsEnabled;
+            OnPropertyChanged(nameof(IsAdvancedEnabled));
+            OnPropertyChanged(nameof(AdvancedToggleButtonText));
+            // Combined checkbox: ON means hidden+system files are NOT excluded
+            _includeHiddenSystemFiles = !_settings.ExcludeHiddenFiles && !_settings.ExcludeSystemFiles;
+            OnPropertyChanged(nameof(IncludeHiddenSystemFiles));
 
             // Content search settings
             FullTextMaxFileSizeMB = _settings.FullTextMaxFileSizeMB;
@@ -436,8 +486,21 @@ namespace TNDexplorer.ViewModels
 
             _settings.MaxSearchResults = MaxSearchResults;
             _settings.NetworkRescanIntervalMinutes = NetworkRescanIntervalMinutes;
-            _settings.ExcludeHiddenFiles = ExcludeHiddenFiles;
-            _settings.ExcludeSystemFiles = ExcludeSystemFiles;
+
+            // Advanced settings: save combined hidden/system checkbox
+            _settings.AdvancedSettingsEnabled = IsAdvancedEnabled;
+            if (IsAdvancedEnabled)
+            {
+                // When advanced is ON, use the combined checkbox value
+                _settings.ExcludeHiddenFiles = !IncludeHiddenSystemFiles;
+                _settings.ExcludeSystemFiles = !IncludeHiddenSystemFiles;
+            }
+            else
+            {
+                // When advanced is OFF, always exclude hidden/system (safe default)
+                _settings.ExcludeHiddenFiles = true;
+                _settings.ExcludeSystemFiles = true;
+            }
 
             _settings.ExcludePatterns = (ExcludePatternsText ?? "")
                 .Split(new[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries)
@@ -465,10 +528,15 @@ namespace TNDexplorer.ViewModels
             _settings.AlternateRowColors = AlternateRowColors;
             _settings.GroupByFiscalYear = GroupByFiscalYear;
 
-            // Save rescan settings
+            // Save rescan settings (with Interval minimum enforcement)
             _settings.RescanMode = (RescanMode)RescanModeIndex;
             _settings.DailyRescanHour = DailyRescanHour;
             _settings.DailyRescanMinute = DailyRescanMinute;
+            // Enforce minimum 180 minutes for Interval mode
+            if (_settings.RescanMode == RescanMode.Interval && _settings.NetworkRescanIntervalMinutes < 180)
+            {
+                _settings.NetworkRescanIntervalMinutes = 180;
+            }
 
             // Save content search settings
             _settings.FullTextMaxFileSizeMB = FullTextMaxFileSizeMB;
@@ -481,6 +549,22 @@ namespace TNDexplorer.ViewModels
 
             _settings.IsFirstRun = false;
             _settingsService.Save(_settings);
+        }
+
+        /// <summary>
+        /// Fallback when advanced settings are disabled:
+        /// - If Interval mode was selected, revert to Daily mode
+        /// - Turn off hidden/system file scanning
+        /// </summary>
+        private void DisableAdvancedSettings()
+        {
+            // If currently on Interval mode (index 1), fall back to Daily (index 0)
+            if (RescanModeIndex == 1)
+            {
+                RescanModeIndex = 0;
+            }
+            // Turn off hidden/system file scanning
+            IncludeHiddenSystemFiles = false;
         }
 
         public AppSettings GetCurrentSettings()

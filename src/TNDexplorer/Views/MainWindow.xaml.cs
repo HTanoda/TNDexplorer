@@ -718,7 +718,23 @@ namespace TNDexplorer.Views
 
             var binding = headerClicked.Column.DisplayMemberBinding as Binding;
             string sortBy = binding?.Path?.Path;
-            if (string.IsNullOrEmpty(sortBy)) return;
+
+            // Fallback for columns using CellTemplate instead of DisplayMemberBinding
+            // (e.g., "名前" column with custom icon + highlighted text template)
+            if (string.IsNullOrEmpty(sortBy))
+            {
+                string header = headerClicked.Column.Header as string;
+                if (!string.IsNullOrEmpty(header))
+                {
+                    // Strip sort indicator (▲/▼) if present from previous sort
+                    header = header.TrimEnd(' ', '▲', '▼');
+                }
+                switch (header)
+                {
+                    case "名前": sortBy = "Name"; break;
+                    default: return; // Unknown column, skip
+                }
+            }
 
             var dataView = CollectionViewSource.GetDefaultView(ResultsListView.ItemsSource);
             if (dataView == null) return;

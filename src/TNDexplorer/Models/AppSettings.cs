@@ -23,7 +23,7 @@ namespace TNDexplorer.Models
         {
             ContentSearchIncludeFilename = true;
             MaxSearchResults = 100000;
-            NetworkRescanIntervalMinutes = 60;
+            NetworkRescanIntervalMinutes = 180;
             ExcludeHiddenFiles = true;
             ExcludeSystemFiles = true;
             IsFirstRun = true;
@@ -73,7 +73,7 @@ namespace TNDexplorer.Models
         public int MaxSearchResults { get; set; } = 100000;
 
         [DataMember]
-        public int NetworkRescanIntervalMinutes { get; set; } = 60;
+        public int NetworkRescanIntervalMinutes { get; set; } = 180;
 
         [DataMember]
         public RescanMode RescanMode { get; set; } = RescanMode.Daily;
@@ -92,6 +92,13 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public bool ExcludeSystemFiles { get; set; } = true;
+
+        /// <summary>
+        /// Whether advanced settings (Interval mode, hidden/system file scan) are enabled.
+        /// When false, Interval mode and hidden/system file scan are locked.
+        /// </summary>
+        [DataMember]
+        public bool AdvancedSettingsEnabled { get; set; } = false;
 
         [DataMember]
         public bool IsFirstRun { get; set; } = true;

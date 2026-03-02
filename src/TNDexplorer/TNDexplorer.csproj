@@ -149,6 +149,7 @@
     <Compile Include="Services\SettingsService.cs" />
     <Compile Include="Services\FileOperationService.cs" />
     <Compile Include="Services\NetworkIndexCache.cs" />
+    <Compile Include="Services\AppRegistration.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <None Include="app.manifest" />
     <None Include="packages.config" />

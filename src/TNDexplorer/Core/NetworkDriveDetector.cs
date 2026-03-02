@@ -106,6 +106,31 @@ namespace TNDexplorer.Core
             = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
+        /// Diagnostic log path for drive letter mapping operations.
+        /// Written to %LOCALAPPDATA%\TNDexplorer\drive_mapping.log
+        /// </summary>
+        private static readonly string _driveMappingLogPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TNDexplorer", "drive_mapping.log");
+
+        private static void LogDriveMapping(string message)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_driveMappingLogPath);
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\r\n";
+                File.AppendAllText(_driveMappingLogPath, line, System.Text.Encoding.UTF8);
+            }
+            catch
+            {
+                Debug.WriteLine($"LogDriveMapping failed: {message}");
+            }
+        }
+
+        /// <summary>
         /// Build the drive letter ↔ UNC path mapping cache by running "net use"
         /// as the non-elevated (linked) user token. This captures drive mappings
         /// created by VBS logon scripts that are invisible to the admin-elevated process.
@@ -113,11 +138,17 @@ namespace TNDexplorer.Core
         /// </summary>
         public void BuildDriveLetterCache()
         {
+            LogDriveMapping("=== BuildDriveLetterCache START ===");
+
+            // Step 1: Run "net use" as the non-elevated (linked) user token
             try
             {
+                LogDriveMapping("Step 1: ParseNetUseOutputAsUser - attempting linked token approach...");
                 var userDrives = ParseNetUseOutputAsUser();
+                LogDriveMapping($"Step 1: ParseNetUseOutputAsUser returned {userDrives.Count} drive(s)");
                 foreach (var d in userDrives)
                 {
+                    LogDriveMapping($"  LinkedToken drive: {d.DriveLetter} -> {d.UncPath}");
                     if (!string.IsNullOrEmpty(d.DriveLetter) && !string.IsNullOrEmpty(d.UncPath))
                     {
                         _driveToUncCache[d.DriveLetter] = d.UncPath;
@@ -128,15 +159,19 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
+                LogDriveMapping($"Step 1: ParseNetUseOutputAsUser FAILED: {ex.GetType().Name}: {ex.Message}");
                 Debug.WriteLine($"BuildDriveLetterCache failed: {ex.Message}");
             }
 
-            // Also merge results from other detection methods (WMI, DriveInfo, etc.)
+            // Step 2: Merge results from other detection methods (WMI, DriveInfo, etc.)
             try
             {
+                LogDriveMapping("Step 2: DetectMappedDrives - merging other detection methods...");
                 var allDrives = DetectMappedDrives();
+                LogDriveMapping($"Step 2: DetectMappedDrives returned {allDrives.Count} drive(s)");
                 foreach (var d in allDrives)
                 {
+                    LogDriveMapping($"  Detected drive: {d.DriveLetter} -> {d.UncPath}");
                     if (!string.IsNullOrEmpty(d.DriveLetter) && !string.IsNullOrEmpty(d.UncPath))
                     {
                         _driveToUncCache.TryAdd(d.DriveLetter, d.UncPath);
@@ -147,7 +182,15 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
+                LogDriveMapping($"Step 2: DetectMappedDrives FAILED: {ex.GetType().Name}: {ex.Message}");
                 Debug.WriteLine($"BuildDriveLetterCache (DetectMappedDrives) failed: {ex.Message}");
+            }
+
+            // Summary
+            LogDriveMapping($"=== BuildDriveLetterCache DONE: {_driveToUncCache.Count} mapping(s) in cache ===");
+            foreach (var kvp in _driveToUncCache)
+            {
+                LogDriveMapping($"  Cache entry: {kvp.Key} -> {kvp.Value}");
             }
         }
 
@@ -234,6 +277,9 @@ namespace TNDexplorer.Core
         private static extern bool ReadFile(IntPtr hFile, byte[] lpBuffer,
             uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct STARTUPINFO
         {
@@ -280,6 +326,11 @@ namespace TNDexplorer.Core
         private const uint CREATE_NO_WINDOW = 0x08000000;
         private const int STARTF_USESTDHANDLES = 0x00000100;
         private const uint HANDLE_FLAG_INHERIT = 0x00000001;
+        private const uint PROCESS_QUERY_INFORMATION = 0x0400;
+
+        // Once set to true, ParseNetUseOutputAsUser() returns empty immediately
+        // to avoid repeated Win32 API calls that are known to fail in this environment.
+        private static bool _userTokenUnavailable = false;
 
         public List<NetworkDriveInfo> DetectMappedDrives()
         {
@@ -415,20 +466,9 @@ namespace TNDexplorer.Core
             }
             catch { }
 
-            // Method 6: Run "net use" as the non-elevated user (linked token)
-            // This catches drives mapped in the standard user session that are
-            // invisible to the admin-elevated process due to UAC token split.
-            try
-            {
-                var userDrives = ParseNetUseOutputAsUser();
-                foreach (var ud in userDrives)
-                {
-                    if (foundLetters.Contains(ud.DriveLetter)) continue;
-                    foundLetters.Add(ud.DriveLetter);
-                    drives.Add(ud);
-                }
-            }
-            catch { }
+            // Method 6: User-session drives from startup cache (built by BuildDriveLetterCache).
+            // No need to re-call ParseNetUseOutputAsUser() here — the results are already
+            // in the static _driveToUncCache and will be picked up by GetUncPath() in Method 3.
 
             return drives;
         }
@@ -647,6 +687,11 @@ namespace TNDexplorer.Core
         private List<NetworkDriveInfo> ParseNetUseOutputAsUser()
         {
             var drives = new List<NetworkDriveInfo>();
+
+            // Skip if previous attempts determined user token is permanently unavailable
+            if (_userTokenUnavailable)
+                return drives;
+
             IntPtr processToken = IntPtr.Zero;
             IntPtr linkedToken = IntPtr.Zero;
             IntPtr primaryToken = IntPtr.Zero;
@@ -658,21 +703,57 @@ namespace TNDexplorer.Core
                 // Step 1: Open current process token
                 if (!OpenProcessToken(GetCurrentProcess(),
                     TOKEN_QUERY | TOKEN_DUPLICATE, out processToken))
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    LogDriveMapping($"  ParseNetUseOutputAsUser: OpenProcessToken FAILED (Win32 error {err})");
+                    _userTokenUnavailable = true;
                     return drives;
+                }
+                LogDriveMapping("  ParseNetUseOutputAsUser: OpenProcessToken OK");
 
                 // Step 2: Get the linked (non-elevated) token
                 int returnLength;
                 if (!GetTokenInformation(processToken, TokenLinkedToken,
                     out linkedToken, IntPtr.Size, out returnLength))
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    LogDriveMapping($"  ParseNetUseOutputAsUser: GetTokenInformation(LinkedToken) FAILED (Win32 error {err})");
+                    _userTokenUnavailable = true;
                     return drives;
+                }
+                LogDriveMapping($"  ParseNetUseOutputAsUser: GetTokenInformation OK (linkedToken=0x{linkedToken.ToInt64():X})");
 
                 if (linkedToken == IntPtr.Zero)
+                {
+                    LogDriveMapping("  ParseNetUseOutputAsUser: linkedToken is NULL - no linked token available");
+                    _userTokenUnavailable = true;
                     return drives;
+                }
 
                 // Step 3: Duplicate as primary token (required for CreateProcessAsUser)
                 if (!DuplicateTokenEx(linkedToken, MAXIMUM_ALLOWED, IntPtr.Zero,
                     SecurityImpersonation, TokenPrimary, out primaryToken))
-                    return drives;
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    LogDriveMapping($"  ParseNetUseOutputAsUser: DuplicateTokenEx FAILED (Win32 error {err})");
+
+                    // Fallback: Get a primary token from the user's explorer.exe process.
+                    // The linked token from GetTokenInformation(TokenLinkedToken) is returned at
+                    // SecurityIdentification level by Windows design, making DuplicateTokenEx fail
+                    // with ERROR_BAD_TOKEN_TYPE (1346). Explorer.exe runs as the non-elevated user
+                    // with a full primary token that can be duplicated successfully.
+                    primaryToken = TryGetTokenFromExplorer();
+                    if (primaryToken == IntPtr.Zero)
+                    {
+                        LogDriveMapping("  ParseNetUseOutputAsUser: All token approaches failed");
+                        _userTokenUnavailable = true;
+                        return drives;
+                    }
+                }
+                else
+                {
+                    LogDriveMapping("  ParseNetUseOutputAsUser: DuplicateTokenEx OK");
+                }
 
                 // Step 4: Create pipe for stdout capture
                 var sa = new SECURITY_ATTRIBUTES
@@ -682,7 +763,11 @@ namespace TNDexplorer.Core
                     lpSecurityDescriptor = IntPtr.Zero
                 };
                 if (!CreatePipe(out hReadPipe, out hWritePipe, ref sa, 0))
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    LogDriveMapping($"  ParseNetUseOutputAsUser: CreatePipe FAILED (Win32 error {err})");
                     return drives;
+                }
 
                 // Don't let the read end be inherited by the child process
                 SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
@@ -698,6 +783,7 @@ namespace TNDexplorer.Core
                 // Step 6: Create the process as the non-elevated user
                 string sysDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
                 string cmdLine = $"\"{sysDir}\\net.exe\" use";
+                LogDriveMapping($"  ParseNetUseOutputAsUser: CreateProcessAsUser cmdLine=\"{cmdLine}\"");
 
                 PROCESS_INFORMATION pi;
                 bool created = CreateProcessAsUser(
@@ -714,7 +800,12 @@ namespace TNDexplorer.Core
                     out pi);
 
                 if (!created)
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    LogDriveMapping($"  ParseNetUseOutputAsUser: CreateProcessAsUser FAILED (Win32 error {err})");
                     return drives;
+                }
+                LogDriveMapping($"  ParseNetUseOutputAsUser: CreateProcessAsUser OK (PID={pi.dwProcessId})");
 
                 // Close write end so ReadFile will eventually return 0
                 CloseHandle(hWritePipe);
@@ -740,6 +831,9 @@ namespace TNDexplorer.Core
                 string output = System.Text.Encoding.GetEncoding(
                     System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage)
                     .GetString(outputBytes.ToArray());
+
+                LogDriveMapping($"  ParseNetUseOutputAsUser: raw output ({outputBytes.Count} bytes):");
+                LogDriveMapping($"  ----\r\n{output}\r\n  ----");
 
                 var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (var line in lines)
@@ -787,8 +881,13 @@ namespace TNDexplorer.Core
                         });
                     }
                 }
+
+                LogDriveMapping($"  ParseNetUseOutputAsUser: parsed {drives.Count} drive(s) from output");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogDriveMapping($"  ParseNetUseOutputAsUser: EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            }
             finally
             {
                 if (hReadPipe != IntPtr.Zero) CloseHandle(hReadPipe);
@@ -799,6 +898,80 @@ namespace TNDexplorer.Core
             }
 
             return drives;
+        }
+
+        /// <summary>
+        /// Fallback: Obtain a usable primary token from the user's explorer.exe process.
+        /// Explorer.exe runs as the non-elevated user with a full primary token,
+        /// unlike the linked token from GetTokenInformation(TokenLinkedToken) which
+        /// is restricted to SecurityIdentification level.
+        /// </summary>
+        private IntPtr TryGetTokenFromExplorer()
+        {
+            LogDriveMapping("  TryGetTokenFromExplorer: Searching for explorer.exe...");
+            try
+            {
+                var explorers = Process.GetProcessesByName("explorer");
+                LogDriveMapping($"  TryGetTokenFromExplorer: Found {explorers.Length} explorer.exe process(es)");
+
+                foreach (var explorer in explorers)
+                {
+                    try
+                    {
+                        IntPtr hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, false, explorer.Id);
+                        if (hProcess == IntPtr.Zero)
+                        {
+                            int err = Marshal.GetLastWin32Error();
+                            LogDriveMapping($"  TryGetTokenFromExplorer: OpenProcess(PID={explorer.Id}) FAILED (Win32 error {err})");
+                            continue;
+                        }
+
+                        IntPtr explorerToken = IntPtr.Zero;
+                        try
+                        {
+                            if (!OpenProcessToken(hProcess, TOKEN_DUPLICATE | TOKEN_QUERY, out explorerToken))
+                            {
+                                int err = Marshal.GetLastWin32Error();
+                                LogDriveMapping($"  TryGetTokenFromExplorer: OpenProcessToken(PID={explorer.Id}) FAILED (Win32 error {err})");
+                                continue;
+                            }
+
+                            IntPtr primaryToken;
+                            if (DuplicateTokenEx(explorerToken, MAXIMUM_ALLOWED, IntPtr.Zero,
+                                SecurityImpersonation, TokenPrimary, out primaryToken))
+                            {
+                                LogDriveMapping($"  TryGetTokenFromExplorer: DuplicateTokenEx OK from explorer.exe (PID={explorer.Id})");
+                                return primaryToken;
+                            }
+                            else
+                            {
+                                int err = Marshal.GetLastWin32Error();
+                                LogDriveMapping($"  TryGetTokenFromExplorer: DuplicateTokenEx(PID={explorer.Id}) FAILED (Win32 error {err})");
+                            }
+                        }
+                        finally
+                        {
+                            if (explorerToken != IntPtr.Zero) CloseHandle(explorerToken);
+                            CloseHandle(hProcess);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogDriveMapping($"  TryGetTokenFromExplorer: Exception for PID={explorer.Id}: {ex.Message}");
+                    }
+                    finally
+                    {
+                        explorer.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDriveMapping($"  TryGetTokenFromExplorer: EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            LogDriveMapping("  TryGetTokenFromExplorer: No usable token found from any explorer.exe");
+            return IntPtr.Zero;
         }
 
         public List<LocalDriveInfo> DetectLocalNtfsDrives()

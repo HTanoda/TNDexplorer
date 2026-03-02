@@ -113,6 +113,42 @@ namespace TNDexplorer.Views
             }
         }
 
+        private void OnToggleAdvancedSettings(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsViewModel;
+            if (vm == null) return;
+
+            if (!vm.IsAdvancedEnabled)
+            {
+                // Enabling advanced settings: show warning dialog
+                var result = MessageBox.Show(
+                    "高度な設定を変更すると、ネットワークおよびシステム全体に\r\n" +
+                    "重大な影響を与える可能性があります。\r\n\r\n" +
+                    "・短い間隔でのリスキャン：\r\n" +
+                    "  ネットワーク帯域を継続的に圧迫し、他のアプリケーションの\r\n" +
+                    "  通信速度低下や、接続先サーバーへの過度な負荷（アクセス制限等）\r\n" +
+                    "  を招く恐れがあります。\r\n\r\n" +
+                    "・システムファイル等のスキャン：\r\n" +
+                    "  スキャン処理が著しく長期化するほか、意図しないファイルロック\r\n" +
+                    "  などによりPCの動作が不安定になる可能性があります。\r\n\r\n" +
+                    "システムへの影響を完全に理解している場合のみ、有効化してください。",
+                    "高度な設定の有効化に関する警告",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No); // Default to "No" (cancel)
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    vm.IsAdvancedEnabled = true;
+                }
+            }
+            else
+            {
+                // Disabling advanced settings: no confirmation needed, auto-fallback in VM
+                vm.IsAdvancedEnabled = false;
+            }
+        }
+
         private void OnManualRescanClick(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;

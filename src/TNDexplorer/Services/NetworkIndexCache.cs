@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -33,6 +34,14 @@ namespace TNDexplorer.Services
 
         private static readonly byte[] Magic = { (byte)'T', (byte)'N', (byte)'D', (byte)'c' };
         private const ushort FormatVersion = 1;
+
+        /// <summary>
+        /// Per-key lock objects to prevent concurrent writes to the same cache file.
+        /// Without this, two threads saving the same cacheKey simultaneously would
+        /// both try to create .tmp files and race on File.Move → IOException.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, object> _keyLocks
+            = new ConcurrentDictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Maximum cache file path length allowed (leave margin below MAX_PATH 260).
@@ -160,13 +169,27 @@ namespace TNDexplorer.Services
 
         public void Save(string cacheKey, List<FileEntry> entries)
         {
+            // Acquire per-key lock to prevent concurrent writes to the same cache file.
+            // This fixes the race condition where initial scan and missed-rescan could
+            // both try to save the same cache simultaneously, causing IOException.
+            var keyLock = _keyLocks.GetOrAdd(cacheKey, _ => new object());
+            lock (keyLock)
+            {
+                SaveInternal(cacheKey, entries);
+            }
+        }
+
+        private void SaveInternal(string cacheKey, List<FileEntry> entries)
+        {
+            string tempPath = null;
             try
             {
                 if (!Directory.Exists(_cacheDir))
                     Directory.CreateDirectory(_cacheDir);
 
                 string path = GetCachePath(cacheKey);
-                string tempPath = path + ".tmp";
+                // Use GUID-based temp file name to avoid collision even if lock is bypassed
+                tempPath = path + "." + Guid.NewGuid().ToString("N").Substring(0, 8) + ".tmp";
 
                 try
                 {
@@ -207,7 +230,7 @@ namespace TNDexplorer.Services
                 }
                 finally
                 {
-                    try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+                    try { if (tempPath != null && File.Exists(tempPath)) File.Delete(tempPath); }
                     catch { }
                 }
             }

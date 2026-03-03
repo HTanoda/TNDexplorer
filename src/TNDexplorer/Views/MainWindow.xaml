@@ -241,7 +241,7 @@
                       AlternationCount="2"
                       VirtualizingStackPanel.IsVirtualizing="True"
                       VirtualizingStackPanel.VirtualizationMode="Recycling"
-                      ScrollViewer.IsDeferredScrollingEnabled="True"
+                      ScrollViewer.IsDeferredScrollingEnabled="False"
                       ScrollViewer.CanContentScroll="True"
                       BorderThickness="0"
                       MouseDoubleClick="ResultsListView_MouseDoubleClick"

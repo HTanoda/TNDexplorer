@@ -132,7 +132,7 @@ namespace TNDexplorer.Core
                             Name = entry.Name,
                             Path = dirPath,
                             FullPath = fullPath,
-                            Size = size,
+                            Size = entry.IsDirectory ? -1 : size,
                             Modified = modified,
                             IsDirectory = entry.IsDirectory,
                         });

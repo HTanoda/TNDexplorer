@@ -678,6 +678,7 @@ namespace TNDexplorer.ViewModels
                         {
                             _dispatcher.Invoke(() =>
                             {
+                                IsContentSearch = false;
                                 StatusText = "内容検索: キャンセルされました";
                             });
                             return;

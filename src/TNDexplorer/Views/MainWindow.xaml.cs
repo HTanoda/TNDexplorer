@@ -353,9 +353,10 @@ namespace TNDexplorer.Views
             double panelWidth = GetPdfPanelWidth();
             _pdfLastPanelWidth = panelWidth;
 
-            // Update render width for crisp output (2x for HiDPI)
+            // Render at 1.5x physical pixel resolution (compromise between quality and memory)
+            // 2x caused freezes on standard-spec PCs due to excessive memory usage
             var dpi = VisualTreeHelper.GetDpi(this);
-            _pdfDocHandle.RenderWidth = (uint)(panelWidth * dpi.DpiScaleX * 2);
+            _pdfDocHandle.RenderWidth = (uint)(panelWidth * dpi.DpiScaleX * 1.5);
 
             // Clear cache — bitmaps are rendered at the old width
             _pdfPageCache.Clear();
@@ -603,6 +604,7 @@ namespace TNDexplorer.Views
             if (_pdfRenderCts != null)
             {
                 try { _pdfRenderCts.Cancel(); } catch { }
+                try { _pdfRenderCts.Dispose(); } catch { }
                 _pdfRenderCts = null;
             }
 

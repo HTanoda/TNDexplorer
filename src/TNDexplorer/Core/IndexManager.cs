@@ -76,6 +76,10 @@ namespace TNDexplorer.Core
                 // This must run before indexing so that folder path resolution works correctly.
                 _driveDetector.BuildDriveLetterCache();
 
+                // Set exclude patterns for search-time filtering
+                // (applies to all index types: MFT, network, custom folders)
+                _index.SetExcludePatterns(settings.ExcludePatterns);
+
                 // Index local NTFS drives
                 var localTasks = new List<Task>();
                 foreach (var drive in settings.LocalDrives.Where(d => d.Enabled))
@@ -107,15 +111,18 @@ namespace TNDexplorer.Core
                     foreach (var folder in settings.CustomFolders.Where(f => f.Enabled))
                     {
                         if (string.IsNullOrWhiteSpace(folder.FolderPath)) continue;
-                        if (!System.IO.Directory.Exists(folder.FolderPath)) continue;
+
+                        // ドライブレター→UNCパス変換（管理者セッションではVBS非永続マッピングが見えないため）
+                        string actualPath = ResolveCustomFolderPath(folder.FolderPath);
+                        if (!System.IO.Directory.Exists(actualPath)) continue;
 
                         byte driveIndex = _nextDriveIndex++;
                         // Use folder path as a pseudo drive letter
-                        string pseudoDrive = folder.FolderPath;
+                        string pseudoDrive = actualPath;
                         _index.SetDriveLetter(driveIndex, pseudoDrive);
                         _customFolderIndexMap[folder.FolderPath] = driveIndex;
 
-                        string rootPath = folder.FolderPath;
+                        string rootPath = actualPath;
                         customFolderTasks.Add(Task.Run(() => IndexCustomFolderWithCache(
                             rootPath, driveIndex,
                             settings.ExcludePatterns, _cts.Token)));
@@ -533,6 +540,25 @@ namespace TNDexplorer.Core
             {
                 System.Diagnostics.Debug.WriteLine($"Custom folder rescan failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Resolve a custom folder path, converting drive letters to UNC paths if needed.
+        /// Handles cases where VBS logon script mappings are invisible to the admin-elevated process.
+        /// </summary>
+        private static string ResolveCustomFolderPath(string folderPath)
+        {
+            if (string.IsNullOrEmpty(folderPath) || folderPath.Length < 2 || folderPath[1] != ':')
+                return folderPath;
+
+            string driveLetter = folderPath.Substring(0, 2);
+            string uncBase = NetworkDriveDetector.GetUncPath(driveLetter);
+            if (!string.IsNullOrEmpty(uncBase))
+            {
+                string remainder = folderPath.Length > 2 ? folderPath.Substring(2) : "";
+                return (uncBase.TrimEnd('\\') + remainder).TrimEnd('\\');
+            }
+            return folderPath;
         }
 
         /// <summary>

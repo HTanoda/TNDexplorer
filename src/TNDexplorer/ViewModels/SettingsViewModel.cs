@@ -320,6 +320,20 @@ namespace TNDexplorer.ViewModels
         public void AddCustomFolder(string folderPath)
         {
             if (string.IsNullOrWhiteSpace(folderPath)) return;
+
+            // ドライブレター (K:\...) → UNCパスに自動変換
+            // 管理者昇格プロセスからはVBS非永続マッピングのドライブが見えないため
+            if (folderPath.Length >= 2 && folderPath[1] == ':')
+            {
+                string driveLetter = folderPath.Substring(0, 2);
+                string uncBase = NetworkDriveDetector.GetUncPath(driveLetter);
+                if (!string.IsNullOrEmpty(uncBase))
+                {
+                    string remainder = folderPath.Length > 2 ? folderPath.Substring(2) : "";
+                    folderPath = (uncBase.TrimEnd('\\') + remainder).TrimEnd('\\');
+                }
+            }
+
             // Avoid duplicates
             foreach (var existing in CustomFolders)
             {

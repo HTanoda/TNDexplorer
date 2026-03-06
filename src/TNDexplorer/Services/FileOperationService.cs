@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using TNDexplorer.Native;
 
@@ -51,29 +53,38 @@ namespace TNDexplorer.Services
 
         public void CopyPathToClipboard(string fullPath)
         {
-            try
-            {
-                Clipboard.SetText(fullPath);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"パスのコピーに失敗しました:\n{ex.Message}",
-                    "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            ClipboardRetry(() => Clipboard.SetText(fullPath), "パスのコピーに失敗しました");
         }
 
         public void CopyFileToClipboard(string fullPath)
         {
-            try
+            ClipboardRetry(() =>
             {
                 var fileCollection = new System.Collections.Specialized.StringCollection();
                 fileCollection.Add(fullPath);
                 Clipboard.SetFileDropList(fileCollection);
-            }
-            catch (Exception ex)
+            }, "コピーに失敗しました");
+        }
+
+        private static void ClipboardRetry(Action action, string errorTitle, int maxRetries = 3, int retryDelayMs = 100)
+        {
+            for (int i = 0; i < maxRetries; i++)
             {
-                MessageBox.Show($"コピーに失敗しました:\n{ex.Message}",
-                    "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                try
+                {
+                    action();
+                    return;
+                }
+                catch (COMException) when (i < maxRetries - 1)
+                {
+                    Thread.Sleep(retryDelayMs);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"{errorTitle}:\n{ex.Message}",
+                        "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
             }
         }
 

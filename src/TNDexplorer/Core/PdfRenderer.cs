@@ -52,6 +52,7 @@ namespace TNDexplorer.Core
             if (!_disposed)
             {
                 _disposed = true;
+                try { _pdfDoc?.Dispose(); } catch { }
                 if (_hClassName != IntPtr.Zero)
                     PdfRenderer.DeleteHString(_hClassName);
             }
@@ -135,18 +136,27 @@ namespace TNDexplorer.Core
         /// <summary>
         /// Wraps IPdfDocument for external (PdfDocumentHandle) access without exposing COM interface.
         /// </summary>
-        private sealed class PdfDocWrapper : IPdfDocumentInternal
+        private sealed class PdfDocWrapper : IPdfDocumentInternal, IDisposable
         {
-            private readonly IPdfDocument _doc;
+            private IPdfDocument _doc;
             internal PdfDocWrapper(IPdfDocument doc) { _doc = doc; }
             public void GetPage(uint pageIndex, out IntPtr page) => _doc.GetPage(pageIndex, out page);
             public void get_PageCount(out uint pageCount) => _doc.get_PageCount(out pageCount);
+            public void Dispose()
+            {
+                var doc = _doc;
+                _doc = null;
+                if (doc != null)
+                {
+                    try { Marshal.ReleaseComObject(doc); } catch { }
+                }
+            }
         }
 
         /// <summary>
         /// Internal interface for PdfDocumentHandle to call rendering without exposing COM types.
         /// </summary>
-        internal interface IPdfDocumentInternal
+        internal interface IPdfDocumentInternal : IDisposable
         {
             void GetPage(uint pageIndex, out IntPtr page);
             void get_PageCount(out uint pageCount);
@@ -244,9 +254,10 @@ namespace TNDexplorer.Core
         public static Bitmap RenderPage(string pdfPath, uint pageIndex, int maxWidth = 0, int maxHeight = 0)
         {
             IntPtr hClassName = IntPtr.Zero;
+            IPdfDocument pdfDoc = null;
             try
             {
-                var pdfDoc = OpenPdfDocument(pdfPath, out hClassName);
+                pdfDoc = OpenPdfDocument(pdfPath, out hClassName);
                 if (pdfDoc == null)
                     return null;
 
@@ -262,6 +273,8 @@ namespace TNDexplorer.Core
             }
             finally
             {
+                if (pdfDoc != null)
+                    try { Marshal.ReleaseComObject(pdfDoc); } catch { }
                 if (hClassName != IntPtr.Zero)
                     WindowsDeleteString(hClassName);
             }
@@ -277,9 +290,10 @@ namespace TNDexplorer.Core
         public static void RenderAllPages(string pdfPath, Action<int, int, Bitmap> onPageRendered, CancellationToken cancellationToken)
         {
             IntPtr hClassName = IntPtr.Zero;
+            IPdfDocument pdfDoc = null;
             try
             {
-                var pdfDoc = OpenPdfDocument(pdfPath, out hClassName);
+                pdfDoc = OpenPdfDocument(pdfPath, out hClassName);
                 if (pdfDoc == null)
                     return;
 
@@ -304,6 +318,8 @@ namespace TNDexplorer.Core
             }
             finally
             {
+                if (pdfDoc != null)
+                    try { Marshal.ReleaseComObject(pdfDoc); } catch { }
                 if (hClassName != IntPtr.Zero)
                     WindowsDeleteString(hClassName);
             }
@@ -339,6 +355,7 @@ namespace TNDexplorer.Core
                     finally
                     {
                         try { ((IClosable)page).Close(); } catch { }
+                        try { Marshal.ReleaseComObject(page); } catch { }
                     }
                 }
 
@@ -369,18 +386,21 @@ namespace TNDexplorer.Core
             var page = (IPdfPage)Marshal.GetObjectForIUnknown(pagePtr);
             Marshal.Release(pagePtr);
 
+            IStream comStream = null;
+            object outputStream = null;
+            object renderOptions = null;
             try
             {
-                CreateStreamOnHGlobal(IntPtr.Zero, true, out IStream comStream);
+                CreateStreamOnHGlobal(IntPtr.Zero, true, out comStream);
                 Guid iidRASOut = IID_IRandomAccessStream;
-                CreateRandomAccessStreamOverStream(comStream, 0, ref iidRASOut, out object outputStream);
+                CreateRandomAccessStreamOverStream(comStream, 0, ref iidRASOut, out outputStream);
 
                 IntPtr renderAsyncPtr;
 
                 if (renderWidth > 0)
                 {
                     // Create PdfPageRenderOptions with DestinationWidth for higher resolution
-                    var renderOptions = CreateRenderOptions(renderWidth);
+                    renderOptions = CreateRenderOptions(renderWidth);
                     if (renderOptions != null)
                     {
                         page.RenderWithOptionsToStreamAsync(outputStream, renderOptions, out renderAsyncPtr);
@@ -416,13 +436,24 @@ namespace TNDexplorer.Core
                     }
                 }
 
-                if (ms.Length == 0) return null;
+                if (ms.Length == 0)
+                {
+                    ms.Dispose();
+                    return null;
+                }
                 ms.Position = 0;
                 return new Bitmap(ms);
             }
             finally
             {
                 try { ((IClosable)page).Close(); } catch { }
+                try { Marshal.ReleaseComObject(page); } catch { }
+                if (renderOptions != null)
+                    try { Marshal.ReleaseComObject(renderOptions); } catch { }
+                if (outputStream != null)
+                    try { Marshal.ReleaseComObject(outputStream); } catch { }
+                if (comStream != null)
+                    try { Marshal.ReleaseComObject(comStream); } catch { }
             }
         }
 
@@ -469,9 +500,10 @@ namespace TNDexplorer.Core
         public static int GetPageCount(string pdfPath)
         {
             IntPtr hClassName = IntPtr.Zero;
+            IPdfDocument pdfDoc = null;
             try
             {
-                var pdfDoc = OpenPdfDocument(pdfPath, out hClassName);
+                pdfDoc = OpenPdfDocument(pdfPath, out hClassName);
                 if (pdfDoc == null)
                     return 0;
 
@@ -484,6 +516,8 @@ namespace TNDexplorer.Core
             }
             finally
             {
+                if (pdfDoc != null)
+                    try { Marshal.ReleaseComObject(pdfDoc); } catch { }
                 if (hClassName != IntPtr.Zero)
                     WindowsDeleteString(hClassName);
             }
@@ -508,12 +542,20 @@ namespace TNDexplorer.Core
             RoGetActivationFactory(hClassName, ref iid, out object factoryObj);
             var factory = (IPdfDocumentStatics)factoryObj;
 
-            factory.LoadFromStreamAsync(fileStream, out IntPtr asyncOpPtr);
-            object pdfDocObj = WaitForAsyncOperation(asyncOpPtr);
-            if (pdfDocObj == null)
-                return null;
+            try
+            {
+                factory.LoadFromStreamAsync(fileStream, out IntPtr asyncOpPtr);
+                object pdfDocObj = WaitForAsyncOperation(asyncOpPtr);
+                if (pdfDocObj == null)
+                    return null;
 
-            return (IPdfDocument)pdfDocObj;
+                return (IPdfDocument)pdfDocObj;
+            }
+            finally
+            {
+                try { Marshal.ReleaseComObject(factoryObj); } catch { }
+                // fileStream is kept alive — the PDF document may hold a reference
+            }
         }
 
         /// <summary>
@@ -525,12 +567,14 @@ namespace TNDexplorer.Core
             var page = (IPdfPage)Marshal.GetObjectForIUnknown(pagePtr);
             Marshal.Release(pagePtr);
 
+            IStream comStream = null;
+            object outputStream = null;
             try
             {
                 // Create output stream for rendering
-                CreateStreamOnHGlobal(IntPtr.Zero, true, out IStream comStream);
+                CreateStreamOnHGlobal(IntPtr.Zero, true, out comStream);
                 Guid iidRASOut = IID_IRandomAccessStream;
-                CreateRandomAccessStreamOverStream(comStream, 0, ref iidRASOut, out object outputStream);
+                CreateRandomAccessStreamOverStream(comStream, 0, ref iidRASOut, out outputStream);
 
                 // Render page to stream (PNG format)
                 page.RenderToStreamAsync(outputStream, out IntPtr renderAsyncPtr);
@@ -558,7 +602,10 @@ namespace TNDexplorer.Core
                 }
 
                 if (ms.Length == 0)
+                {
+                    ms.Dispose();
                     return null;
+                }
 
                 ms.Position = 0;
                 return new Bitmap(ms);
@@ -566,6 +613,11 @@ namespace TNDexplorer.Core
             finally
             {
                 try { ((IClosable)page).Close(); } catch { }
+                try { Marshal.ReleaseComObject(page); } catch { }
+                if (outputStream != null)
+                    try { Marshal.ReleaseComObject(outputStream); } catch { }
+                if (comStream != null)
+                    try { Marshal.ReleaseComObject(comStream); } catch { }
             }
         }
 

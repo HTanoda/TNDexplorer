@@ -31,6 +31,14 @@ namespace TNDexplorer.Core
         private readonly ConcurrentDictionary<ulong, string> _pathCache
             = new ConcurrentDictionary<ulong, string>();
 
+        // Exclude patterns (folder names to skip in search results)
+        private IReadOnlyList<string> _excludePatterns;
+
+        // Memoization cache for exclude ancestor checks
+        // Key: MakeKey(driveIndex, frn), Value: true if excluded
+        private readonly ConcurrentDictionary<ulong, bool> _excludeCache
+            = new ConcurrentDictionary<ulong, bool>();
+
         public int TotalCount => _count;
 
         public void SetDriveLetter(byte driveIndex, string driveLetter)
@@ -297,6 +305,26 @@ namespace TNDexplorer.Core
                         if (excludeHidden && entry.IsHidden) continue;
                         if (excludeSystem && entry.IsSystem) continue;
 
+                        // Exclude entries in excluded folders (e.g., $Recycle.Bin)
+                        var excludePatterns = _excludePatterns;
+                        if (excludePatterns != null && excludePatterns.Count > 0)
+                        {
+                            // Check if directory itself matches an exclude pattern
+                            if (entry.IsDirectory)
+                            {
+                                bool selfExcluded = false;
+                                for (int p = 0; p < excludePatterns.Count; p++)
+                                {
+                                    if (string.Equals(entry.Name, excludePatterns[p], StringComparison.OrdinalIgnoreCase))
+                                    { selfExcluded = true; break; }
+                                }
+                                if (selfExcluded) continue;
+                            }
+                            // Check if any ancestor directory matches an exclude pattern
+                            if (IsAncestorExcluded(entry.DriveIndex, entry.ParentFileReferenceNumber))
+                                continue;
+                        }
+
                         // Apply filter
                         if (filter == SearchFilter.FilesOnly && entry.IsDirectory) continue;
                         if (filter == SearchFilter.FoldersOnly && !entry.IsDirectory) continue;
@@ -458,6 +486,76 @@ namespace TNDexplorer.Core
             }
         }
 
+        /// <summary>
+        /// Set folder name patterns to exclude from search results.
+        /// Entries whose name (for directories) or any ancestor directory name
+        /// matches a pattern will be excluded.
+        /// </summary>
+        public void SetExcludePatterns(IReadOnlyList<string> patterns)
+        {
+            _excludePatterns = (patterns != null && patterns.Count > 0) ? patterns : null;
+            _excludeCache.Clear();
+        }
+
+        /// <summary>
+        /// Check if any ancestor directory of the given parent FRN matches an exclude pattern.
+        /// Uses memoization for performance (sibling entries share ancestors).
+        /// </summary>
+        private bool IsAncestorExcluded(byte driveIndex, ulong parentFrn)
+        {
+            ulong current = parentFrn;
+            int maxDepth = 64;
+            var chain = new List<ulong>();
+
+            while (current != 0 && maxDepth-- > 0)
+            {
+                ulong key = MakeKey(driveIndex, current);
+
+                // Check memoization cache
+                if (_excludeCache.TryGetValue(key, out bool cached))
+                {
+                    // Propagate cached result to all entries in the chain
+                    foreach (var chainKey in chain)
+                        _excludeCache[chainKey] = cached;
+                    return cached;
+                }
+
+                if (!_frnLookup.TryGetValue(key, out FileEntry parent))
+                    break;
+
+                // Check if this ancestor matches any exclude pattern
+                bool isExcluded = false;
+                var patterns = _excludePatterns;
+                for (int i = 0; i < patterns.Count; i++)
+                {
+                    if (string.Equals(parent.Name, patterns[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        isExcluded = true;
+                        break;
+                    }
+                }
+
+                if (isExcluded)
+                {
+                    _excludeCache[key] = true;
+                    foreach (var chainKey in chain)
+                        _excludeCache[chainKey] = true;
+                    return true;
+                }
+
+                chain.Add(key);
+
+                if (parent.ParentFileReferenceNumber == current)
+                    break;
+                current = parent.ParentFileReferenceNumber;
+            }
+
+            // Not excluded — cache negative result for all chain entries
+            foreach (var chainKey in chain)
+                _excludeCache[chainKey] = false;
+            return false;
+        }
+
         public void Clear()
         {
             lock (_lock)
@@ -466,6 +564,7 @@ namespace TNDexplorer.Core
                 _count = 0;
                 _frnLookup.Clear();
                 _pathCache.Clear();
+                _excludeCache.Clear();
             }
         }
 

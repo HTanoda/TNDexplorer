@@ -230,35 +230,59 @@ namespace TNDexplorer.Core
                 return false;
             }
 
-            // Use Medium IL impersonation for the entire COM preview pipeline.
-            // Admin-elevated processes can fail QI / Initialize against
-            // preview handlers that run at Medium integrity level.
-            IntPtr ilToken = BeginMediumILImpersonation();
+            string extension = Path.GetExtension(filePath);
+            if (string.IsNullOrEmpty(extension))
+            {
+                error = "拡張子がありません";
+                return false;
+            }
+
+            Guid? handlerClsid = GetPreviewHandlerCLSID(extension);
+            if (!handlerClsid.HasValue)
+            {
+                error = $"{extension} のプレビューハンドラが登録されていません";
+                return false;
+            }
+
+            // Try 1: Without impersonation.
+            // LocalServer32 handlers (Office apps) work better without Medium IL
+            // impersonation, especially when the Office app is already running.
+            string firstError;
+            if (TryShowPreviewCore(filePath, parentHwnd, left, top, width, height, handlerClsid.Value, false, out firstError))
+                return true;
+
+            // Clean up any partial state from failed first attempt
+            UnloadPreview();
+
+            // Try 2: With Medium IL impersonation.
+            // InprocServer32 handlers (e.g. some PDF viewers) may require Medium IL
+            // when our process runs as admin (High IL).
+            if (TryShowPreviewCore(filePath, parentHwnd, left, top, width, height, handlerClsid.Value, true, out error))
+                return true;
+
+            // Both attempts failed — use the more informative error
+            if (string.IsNullOrEmpty(error)) error = firstError;
+            return false;
+        }
+
+        /// <summary>
+        /// Core preview logic. Optionally impersonates Medium IL before COM operations.
+        /// </summary>
+        private bool TryShowPreviewCore(string filePath, IntPtr parentHwnd, int left, int top, int width, int height,
+            Guid handlerClsid, bool impersonate, out string error)
+        {
+            error = null;
+            IntPtr ilToken = impersonate ? BeginMediumILImpersonation() : IntPtr.Zero;
             try
             {
-                string extension = Path.GetExtension(filePath);
-                if (string.IsNullOrEmpty(extension))
-                {
-                    error = "拡張子がありません";
-                    return false;
-                }
-
-                Guid? handlerClsid = GetPreviewHandlerCLSID(extension);
-                if (!handlerClsid.HasValue)
-                {
-                    error = $"{extension} のプレビューハンドラが登録されていません";
-                    return false;
-                }
-
-                // Create COM object
-                object handler = CreateComObject(handlerClsid.Value);
+                object handler = CreateComObject(handlerClsid);
                 if (handler == null)
                 {
-                    error = $"COMオブジェクト生成に失敗\n({handlerClsid.Value})";
+                    error = $"COMオブジェクト生成に失敗\n({handlerClsid})";
                     return false;
                 }
 
-                // Initialize handler (try file first, required by some handlers like Office)
+                // Initialize: try stream first (avoids file locking), then file path
                 bool initialized = InitializeHandler(handler, filePath);
                 if (!initialized)
                 {
@@ -269,7 +293,6 @@ namespace TNDexplorer.Core
                     return false;
                 }
 
-                // Create a child window at the exact position of the preview border
                 _hostHwnd = CreateWindowEx(
                     0, "Static", "",
                     WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
@@ -283,7 +306,6 @@ namespace TNDexplorer.Core
                     return false;
                 }
 
-                // Get IPreviewHandler via QueryInterface
                 IPreviewHandler previewHandler = GetPreviewHandlerInterface(handler);
                 if (previewHandler == null)
                 {
@@ -296,7 +318,6 @@ namespace TNDexplorer.Core
 
                 _currentHandler = previewHandler;
 
-                // SetWindow + DoPreview
                 var rect = new RECT(0, 0, width, height);
                 _currentHandler.SetWindow(_hostHwnd, ref rect);
                 _currentHandler.DoPreview();
@@ -353,8 +374,6 @@ namespace TNDexplorer.Core
         {
             // Use Activator.CreateInstance which creates a proper .NET RCW
             // that supports interface casting (is/as) reliably.
-            // This works better than CoCreateInstance + GetObjectForIUnknown
-            // for preview handlers that run out-of-process.
             try
             {
                 Type handlerType = Type.GetTypeFromCLSID(clsid, true);
@@ -391,11 +410,14 @@ namespace TNDexplorer.Core
         {
             _initError = null;
 
-            // Try file initialization first (required by some handlers like Office)
-            if (TryInitializeWithFile(handler, filePath))
+            // Try stream initialization first to avoid file locking.
+            // Stream-based init gives us control of the file handle (opened with
+            // FileShare.ReadWrite), so the file can be opened by other apps.
+            if (TryInitializeWithStream(handler, filePath))
                 return true;
 
-            if (TryInitializeWithStream(handler, filePath))
+            // Fallback: file path initialization (some handlers only support this)
+            if (TryInitializeWithFile(handler, filePath))
                 return true;
 
             return false;

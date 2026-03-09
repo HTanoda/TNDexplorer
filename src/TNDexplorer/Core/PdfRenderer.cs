@@ -44,7 +44,14 @@ namespace TNDexplorer.Core
         {
             if (_disposed) return null;
             if (pageIndex < 0 || pageIndex >= PageCount) return null;
-            return PdfRenderer.RenderSinglePageFromDoc(_pdfDoc, (uint)pageIndex, RenderWidth);
+            try
+            {
+                return PdfRenderer.RenderSinglePageFromDoc(_pdfDoc, (uint)pageIndex, RenderWidth);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public void Dispose()
@@ -687,30 +694,35 @@ namespace TNDexplorer.Core
             var asyncInfo = (IAsyncInfo)Marshal.GetObjectForIUnknown(asyncInfoPtr);
             Marshal.Release(asyncInfoPtr);
 
-            int maxWait = 10000;
+            int maxWait = 5000;
             int waited = 0;
-            while (waited < maxWait)
+            try
             {
-                asyncInfo.get_Status(out AsyncStatus status);
-                if (status == AsyncStatus.Completed)
-                    break;
-                if (status == AsyncStatus.Error)
+                while (waited < maxWait)
                 {
-                    asyncInfo.get_ErrorCode(out int errorCode);
-                    Marshal.Release(asyncActionPtr);
-                    throw new COMException("Async action failed", errorCode);
-                }
-                if (status == AsyncStatus.Canceled)
-                {
-                    Marshal.Release(asyncActionPtr);
-                    throw new OperationCanceledException();
-                }
+                    asyncInfo.get_Status(out AsyncStatus status);
+                    if (status == AsyncStatus.Completed)
+                        break;
+                    if (status == AsyncStatus.Error)
+                    {
+                        asyncInfo.get_ErrorCode(out int errorCode);
+                        Marshal.Release(asyncActionPtr);
+                        throw new COMException("Async action failed", errorCode);
+                    }
+                    if (status == AsyncStatus.Canceled)
+                    {
+                        Marshal.Release(asyncActionPtr);
+                        throw new OperationCanceledException();
+                    }
 
-                Thread.Sleep(10);
-                waited += 10;
+                    Thread.Sleep(10);
+                    waited += 10;
+                }
             }
+            catch (COMException) { }
+            catch (InvalidComObjectException) { }
 
-            Marshal.Release(asyncActionPtr);
+            try { Marshal.Release(asyncActionPtr); } catch { }
         }
 
         #endregion

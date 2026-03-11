@@ -17,7 +17,7 @@ namespace TNDexplorer.Core
     {
         private readonly PdfRenderer.IPdfDocumentInternal _pdfDoc;
         private readonly IntPtr _hClassName;
-        private bool _disposed;
+        private volatile bool _disposed;
 
         public int PageCount { get; }
         public SizeF[] PageSizes { get; }
@@ -40,13 +40,13 @@ namespace TNDexplorer.Core
         /// Renders a single page to a System.Drawing.Bitmap.
         /// Thread-safe: can be called from a background thread.
         /// </summary>
-        public Bitmap RenderPage(int pageIndex)
+        public Bitmap RenderPage(int pageIndex, CancellationToken ct = default)
         {
             if (_disposed) return null;
             if (pageIndex < 0 || pageIndex >= PageCount) return null;
             try
             {
-                return PdfRenderer.RenderSinglePageFromDoc(_pdfDoc, (uint)pageIndex, RenderWidth);
+                return PdfRenderer.RenderSinglePageFromDoc(_pdfDoc, (uint)pageIndex, RenderWidth, ct);
             }
             catch
             {
@@ -387,8 +387,9 @@ namespace TNDexplorer.Core
         /// Renders a single page from an IPdfDocumentInternal (used by PdfDocumentHandle).
         /// If renderWidth > 0, renders at higher resolution using PdfPageRenderOptions.
         /// </summary>
-        internal static Bitmap RenderSinglePageFromDoc(IPdfDocumentInternal pdfDoc, uint pageIndex, uint renderWidth = 0)
+        internal static Bitmap RenderSinglePageFromDoc(IPdfDocumentInternal pdfDoc, uint pageIndex, uint renderWidth = 0, CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
             pdfDoc.GetPage(pageIndex, out IntPtr pagePtr);
             var page = (IPdfPage)Marshal.GetObjectForIUnknown(pagePtr);
             Marshal.Release(pagePtr);
@@ -422,7 +423,7 @@ namespace TNDexplorer.Core
                     page.RenderToStreamAsync(outputStream, out renderAsyncPtr);
                 }
 
-                WaitForAsyncAction(renderAsyncPtr);
+                WaitForAsyncAction(renderAsyncPtr, ct);
 
                 comStream.Seek(0, 0, IntPtr.Zero);
                 var ms = new MemoryStream();
@@ -687,7 +688,7 @@ namespace TNDexplorer.Core
             return result;
         }
 
-        private static void WaitForAsyncAction(IntPtr asyncActionPtr)
+        private static void WaitForAsyncAction(IntPtr asyncActionPtr, CancellationToken ct = default)
         {
             Guid iidAsyncInfo = new Guid("00000036-0000-0000-C000-000000000046");
             Marshal.QueryInterface(asyncActionPtr, ref iidAsyncInfo, out IntPtr asyncInfoPtr);
@@ -700,18 +701,22 @@ namespace TNDexplorer.Core
             {
                 while (waited < maxWait)
                 {
+                    if (ct.IsCancellationRequested)
+                    {
+                        try { asyncInfo.Cancel(); } catch { }
+                        throw new OperationCanceledException(ct);
+                    }
+
                     asyncInfo.get_Status(out AsyncStatus status);
                     if (status == AsyncStatus.Completed)
                         break;
                     if (status == AsyncStatus.Error)
                     {
                         asyncInfo.get_ErrorCode(out int errorCode);
-                        Marshal.Release(asyncActionPtr);
                         throw new COMException("Async action failed", errorCode);
                     }
                     if (status == AsyncStatus.Canceled)
                     {
-                        Marshal.Release(asyncActionPtr);
                         throw new OperationCanceledException();
                     }
 
@@ -721,8 +726,10 @@ namespace TNDexplorer.Core
             }
             catch (COMException) { }
             catch (InvalidComObjectException) { }
-
-            try { Marshal.Release(asyncActionPtr); } catch { }
+            finally
+            {
+                try { Marshal.Release(asyncActionPtr); } catch { }
+            }
         }
 
         #endregion

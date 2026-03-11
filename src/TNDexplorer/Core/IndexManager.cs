@@ -743,6 +743,8 @@ namespace TNDexplorer.Core
             if (!_disposed)
             {
                 _cts?.Cancel();
+                // Disable timer callbacks before Dispose to prevent firing during cleanup
+                _rescanTimer?.Change(Timeout.Infinite, Timeout.Infinite);
                 _rescanTimer?.Dispose();
 
                 // Save caches before disposing (Everythingのアプリ終了時保存と同様)

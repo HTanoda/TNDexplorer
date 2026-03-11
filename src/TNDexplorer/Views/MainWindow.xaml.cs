@@ -539,6 +539,10 @@ namespace TNDexplorer.Views
             if (cts == null) return;
             var ct = cts.Token;
 
+            // Clean up completed tasks to prevent unbounded accumulation
+            if (_pdfRenderTasks.Count > 20)
+                _pdfRenderTasks.RemoveAll(t => t.IsCompleted);
+
             // Render pages that are not yet cached
             for (int i = renderFrom; i <= renderTo; i++)
             {
@@ -560,8 +564,9 @@ namespace TNDexplorer.Views
                     System.Drawing.Bitmap bitmap = null;
                     try
                     {
-                        bitmap = docHandle.RenderPage(pageIndex);
+                        bitmap = docHandle.RenderPage(pageIndex, ct);
                     }
+                    catch (OperationCanceledException) { return; }
                     catch { }
 
                     if (bitmap == null || ct.IsCancellationRequested)
@@ -649,7 +654,12 @@ namespace TNDexplorer.Views
             }
         }
 
-        private void CancelPdfRendering()
+        /// <summary>
+        /// Cancels PDF rendering and releases resources.
+        /// When isClosing=true (app exit), skips COM Dispose to avoid STA/MTA
+        /// cross-apartment deadlock — OS reclaims all COM objects on process exit.
+        /// </summary>
+        private void CancelPdfRendering(bool isClosing = false)
         {
             PdfScrollViewer.ScrollChanged -= PdfScrollViewer_ScrollChanged;
 
@@ -663,10 +673,13 @@ namespace TNDexplorer.Views
                 try { _pdfRenderCts.Cancel(); } catch { }
             }
 
-            // Wait for background render tasks to finish before disposing COM handles
+            // Wait for background render tasks to finish.
+            // With CancellationToken flowing through WaitForAsyncAction, tasks should
+            // exit within ~20ms of cancellation. 3s timeout is a safety net.
             if (_pdfRenderTasks.Count > 0)
             {
-                try { Task.WhenAll(_pdfRenderTasks).Wait(500); } catch { }
+                try { Task.WhenAll(_pdfRenderTasks).Wait(3000); }
+                catch { }
                 _pdfRenderTasks.Clear();
             }
 
@@ -678,7 +691,11 @@ namespace TNDexplorer.Views
 
             if (_pdfDocHandle != null)
             {
-                _pdfDocHandle.Dispose();
+                // Normal operation (preview switch): Dispose to free resources.
+                // App exit: Skip Dispose to avoid COM cross-apartment deadlock.
+                // OS reclaims all COM objects when the process terminates.
+                if (!isClosing)
+                    _pdfDocHandle.Dispose();
                 _pdfDocHandle = null;
             }
 
@@ -788,15 +805,29 @@ namespace TNDexplorer.Views
 
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            CancelPdfRendering();
-            _previewHost?.Dispose();
+            // Safety kill timer: forcefully terminate if shutdown hangs (COM deadlock, finalizer hang, etc.)
+            var killThread = new Thread(() =>
+            {
+                Thread.Sleep(5000);
+                try { Process.GetCurrentProcess().Kill(); } catch { }
+            });
+            killThread.IsBackground = true;
+            killThread.Start();
 
-            var vm = DataContext as MainViewModel;
-            vm?.Dispose();
+            // Cancel render tasks only; skip COM Dispose to avoid STA/MTA deadlock
+            try { CancelPdfRendering(isClosing: true); } catch { }
+
+            // Skip _previewHost.Dispose() — COM preview handlers can also deadlock on exit.
+            // OS reclaims all COM objects when the process terminates.
+
+            try
+            {
+                var vm = DataContext as MainViewModel;
+                vm?.Dispose();
+            }
+            catch { }
 
             // Force exit to terminate lingering background threads (USN monitor, etc.)
-            // CancelPdfRendering() already waited for render tasks to complete,
-            // so COM handles are safely disposed at this point.
             Environment.Exit(0);
         }
 

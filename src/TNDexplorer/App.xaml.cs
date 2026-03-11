@@ -172,7 +172,7 @@ namespace TNDexplorer
                     UseShellExecute = true,
                     Verb = "runas"
                 };
-                Process.Start(processInfo);
+                Process.Start(processInfo)?.Dispose();
             }
             catch (Exception)
             {
@@ -184,7 +184,7 @@ namespace TNDexplorer
         {
             try
             {
-                Process.Start(Process.GetCurrentProcess().MainModule.FileName);
+                Process.Start(Process.GetCurrentProcess().MainModule.FileName)?.Dispose();
                 Shutdown();
             }
             catch (Exception ex)

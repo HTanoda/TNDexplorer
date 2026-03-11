@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,6 +33,12 @@ namespace TNDexplorer.Core
         private bool _disposed;
 
         public event EventHandler<FileChangeEventArgs> FileChanged;
+
+        /// <summary>
+        /// Raised when the USN Journal has overflowed (entries deleted/wrapped around).
+        /// The subscriber should trigger a full MFT rescan for this drive.
+        /// </summary>
+        public event EventHandler JournalOverflow;
 
         public UsnJournalMonitor(IntPtr volumeHandle, byte driveIndex, FileIndex index,
             ulong journalId, long startUsn)
@@ -109,7 +116,24 @@ namespace TNDexplorer.Core
                             out int bytesReturned,
                             IntPtr.Zero);
 
-                        if (!success || ct.IsCancellationRequested)
+                        if (!success)
+                        {
+                            int error = Marshal.GetLastWin32Error();
+                            if (error == NativeConstants.ERROR_JOURNAL_ENTRY_DELETED
+                                || error == NativeConstants.ERROR_JOURNAL_DELETE_IN_PROGRESS
+                                || error == NativeConstants.ERROR_JOURNAL_NOT_ACTIVE)
+                            {
+                                Debug.WriteLine($"USN Journal overflow/reset detected on drive index {_driveIndex} (error={error}). Requesting full rescan.");
+                                JournalOverflow?.Invoke(this, EventArgs.Empty);
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"FSCTL_READ_USN_JOURNAL failed on drive index {_driveIndex} with error {error}");
+                            }
+                            break;
+                        }
+
+                        if (ct.IsCancellationRequested)
                             break;
 
                         if (bytesReturned <= 8)

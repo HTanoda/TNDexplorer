@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Diagnostics;
+using System.Linq;
 using TNDexplorer.Core;
 using TNDexplorer.ViewModels;
 
@@ -57,6 +58,9 @@ namespace TNDexplorer.Views
                 vm.PreviewFileChanged += OnPreviewFileChanged;
                 vm.PreviewVisibilityChanged += OnPreviewVisibilityChanged;
                 vm.FileOpening += OnFileOpening;
+
+                // Restore saved column order
+                RestoreColumnOrder(vm);
             }
         }
 
@@ -216,8 +220,11 @@ namespace TNDexplorer.Views
                 else
                 {
                     PreviewPlaceholder.Text = string.IsNullOrEmpty(previewError)
-                        ? "このファイル形式はプレビューできません"
-                        : $"プレビューに失敗しました\n{previewError}";
+                        ? "このファイル形式に対応するプレビュー\n"
+                          + "ハンドラがインストールされていません"
+                        : $"プレビューの表示中にエラーが発生しました\n\n"
+                          + "別のアプリでファイルを開いている場合は\n"
+                          + "閉じてから再度お試しください。";
                 }
                 PreviewPlaceholder.Visibility = Visibility.Visible;
             }
@@ -255,7 +262,7 @@ namespace TNDexplorer.Views
                         return true;
                 }
             }
-            catch { }
+            catch (Exception ex) { Debug.WriteLine($"IsPowerPointRunning check failed: {ex.Message}"); }
             return false;
         }
 
@@ -301,9 +308,13 @@ namespace TNDexplorer.Views
                 _currentPreviewPath = filePath;
                 _isPdfPreview = true; // reuse flag to skip child HWND repositioning
             }
-            catch
+            catch (Exception ex)
             {
-                PreviewPlaceholder.Text = "この画像はプレビューできません";
+                Debug.WriteLine($"Image preview failed for {filePath}: {ex.Message}");
+                PreviewPlaceholder.Text =
+                    "この画像はプレビューできません\n\n"
+                    + "ファイルが破損しているか、\n"
+                    + "対応していない画像形式です。";
                 PreviewPlaceholder.Visibility = Visibility.Visible;
             }
         }
@@ -333,7 +344,10 @@ namespace TNDexplorer.Views
                 {
                     docHandle = PdfRenderer.OpenDocument(filePath);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"PDF open failed for {filePath}: {ex.Message}");
+                }
 
                 if (docHandle == null || ct.IsCancellationRequested)
                 {
@@ -342,7 +356,10 @@ namespace TNDexplorer.Views
                     {
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            PreviewPlaceholder.Text = "PDFのプレビューに失敗しました";
+                            PreviewPlaceholder.Text =
+                                "PDFを開けませんでした\n\n"
+                                + "ファイルが破損しているか、\n"
+                                + "パスワードで保護されている可能性があります。";
                             PreviewPlaceholder.Visibility = Visibility.Visible;
                         }));
                     }
@@ -567,7 +584,7 @@ namespace TNDexplorer.Views
                         bitmap = docHandle.RenderPage(pageIndex, ct);
                     }
                     catch (OperationCanceledException) { return; }
-                    catch { }
+                    catch (Exception ex) { Debug.WriteLine($"PDF page {pageIndex} render failed: {ex.Message}"); }
 
                     if (bitmap == null || ct.IsCancellationRequested)
                     {
@@ -590,7 +607,7 @@ namespace TNDexplorer.Views
                             SetPdfPageImage(pageIndex, bitmapSource);
                         }));
                     }
-                    catch { }
+                    catch (Exception ex) { Debug.WriteLine($"PDF page {pageIndex} bitmap conversion failed: {ex.Message}"); }
                     finally
                     {
                         if (hBitmap != IntPtr.Zero) DeleteObject(hBitmap);
@@ -718,8 +735,9 @@ namespace TNDexplorer.Views
                 var topLeft = transform.Transform(new Point(0, 0));
                 return new Rect(topLeft.X, topLeft.Y, element.ActualWidth, element.ActualHeight);
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"GetElementRectInWindow failed: {ex.Message}");
                 return Rect.Empty;
             }
         }
@@ -805,6 +823,23 @@ namespace TNDexplorer.Views
 
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
+            // Save column order before starting shutdown
+            try
+            {
+                var gridView = ResultsListView.View as GridView;
+                if (gridView != null)
+                {
+                    var vm = DataContext as MainViewModel;
+                    var order = gridView.Columns
+                        .Select(c => c.Header as string)
+                        .Where(h => h != null)
+                        .Select(h => h.TrimEnd(' ', '▲', '▼'))
+                        .ToList();
+                    vm?.SaveColumnOrder(order);
+                }
+            }
+            catch { }
+
             // Safety kill timer: forcefully terminate if shutdown hangs (COM deadlock, finalizer hang, etc.)
             var killThread = new Thread(() =>
             {
@@ -890,6 +925,55 @@ namespace TNDexplorer.Views
 
             _lastHeaderClicked = headerClicked;
             _lastDirection = direction;
+        }
+
+        /// <summary>
+        /// Restores column order from saved settings.
+        /// If settings are invalid or incomplete, keeps XAML-defined default order.
+        /// </summary>
+        private void RestoreColumnOrder(MainViewModel vm)
+        {
+            try
+            {
+                var settings = vm.GetSettings();
+                if (settings?.ColumnOrder == null || settings.ColumnOrder.Count == 0)
+                    return;
+
+                var gridView = ResultsListView.View as GridView;
+                if (gridView == null) return;
+
+                var savedOrder = settings.ColumnOrder;
+
+                // Validate: saved order must match current column count
+                if (savedOrder.Count != gridView.Columns.Count)
+                    return;
+
+                // Build a lookup from header name to column
+                var columnMap = new Dictionary<string, GridViewColumn>();
+                foreach (var col in gridView.Columns)
+                {
+                    var header = col.Header as string;
+                    if (header != null)
+                        columnMap[header] = col;
+                }
+
+                // Validate: all saved header names must exist
+                foreach (var name in savedOrder)
+                {
+                    if (!columnMap.ContainsKey(name))
+                        return;
+                }
+
+                // Reorder columns to match saved order
+                for (int i = 0; i < savedOrder.Count; i++)
+                {
+                    var targetCol = columnMap[savedOrder[i]];
+                    int currentIndex = gridView.Columns.IndexOf(targetCol);
+                    if (currentIndex != i)
+                        gridView.Columns.Move(currentIndex, i);
+                }
+            }
+            catch { }
         }
     }
 }

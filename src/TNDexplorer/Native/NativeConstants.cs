@@ -54,6 +54,8 @@ namespace TNDexplorer.Native
         // Error codes
         internal const int ERROR_HANDLE_EOF = 38;
         internal const int ERROR_JOURNAL_NOT_ACTIVE = 1179;
+        internal const int ERROR_JOURNAL_DELETE_IN_PROGRESS = 1178;
+        internal const int ERROR_JOURNAL_ENTRY_DELETED = 1181;
 
         // Invalid handle
         internal static readonly System.IntPtr INVALID_HANDLE_VALUE = new System.IntPtr(-1);

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -276,6 +278,32 @@ namespace TNDexplorer.Core
                 {
                     RaiseProgress(null, _index.TotalCount, IndexingState.Ready);
                 };
+
+                // On journal overflow, re-read the full MFT for this drive
+                string dl = driveLetter;
+                byte di = driveIndex;
+                monitor.JournalOverflow += (s, e) =>
+                {
+                    Debug.WriteLine($"Journal overflow on {dl}: triggering full MFT rescan");
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            var reader = new MftReader(dl, di);
+                            var rescanEntries = reader.EnumerateAllEntries(_cts.Token);
+                            _index.RemoveEntriesForDrive(di);
+                            _index.AddEntries(di, rescanEntries);
+                            RaiseProgress(
+                                $"{dl} MFT再スキャン完了 ({rescanEntries.Count:N0} 件)",
+                                _index.TotalCount, IndexingState.Ready);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"MFT rescan failed for {dl}: {ex.Message}");
+                        }
+                    });
+                };
+
                 monitor.Start();
             }
             catch (Exception ex)
@@ -371,8 +399,8 @@ namespace TNDexplorer.Core
                 var entries = scanner.ScanDrive(rootPath, driveIndex, excludePatterns, ct, progress);
                 _index.AddEntries(driveIndex, entries);
 
-                // Save to cache
-                _networkCache.Save(driveLetter, entries);
+                // Save to cache (with retry for transient IO errors)
+                SaveCacheWithRetry(driveLetter, entries);
 
                 RaiseProgress(
                     $"{rootPath} 完了 ({entries.Count:N0} 件)",
@@ -381,6 +409,7 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
+                Debug.WriteLine($"IndexNetworkDrive failed for {rootPath}: {ex}");
                 RaiseProgress(
                     $"{rootPath} エラー: {ex.Message}",
                     _index.TotalCount,
@@ -401,8 +430,8 @@ namespace TNDexplorer.Core
                 _index.RemoveEntriesForDrive(driveIndex);
                 _index.AddEntries(driveIndex, entries);
 
-                // Update cache
-                _networkCache.Save(driveLetter, entries);
+                // Update cache (with retry for transient IO errors)
+                SaveCacheWithRetry(driveLetter, entries);
 
                 RaiseProgress(
                     $"{driveLetter} リスキャン完了 ({entries.Count:N0} 件)",
@@ -411,7 +440,7 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Network rescan failed: {ex.Message}");
+                Debug.WriteLine($"Network rescan failed for {rootPath}: {ex}");
             }
         }
 
@@ -499,8 +528,8 @@ namespace TNDexplorer.Core
                 var entries = scanner.ScanDrive(rootWithSlash, driveIndex, excludePatterns, ct, progress);
                 _index.AddEntries(driveIndex, entries);
 
-                // Save to cache
-                _networkCache.Save(cacheKey, entries);
+                // Save to cache (with retry for transient IO errors)
+                SaveCacheWithRetry(cacheKey, entries);
 
                 RaiseProgress(
                     $"{rootPath} 完了 ({entries.Count:N0} 件)",
@@ -509,6 +538,7 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
+                Debug.WriteLine($"IndexCustomFolder failed for {rootPath}: {ex}");
                 RaiseProgress(
                     $"{rootPath} エラー: {ex.Message}",
                     _index.TotalCount,
@@ -529,7 +559,7 @@ namespace TNDexplorer.Core
                 _index.RemoveEntriesForDrive(driveIndex);
                 _index.AddEntries(driveIndex, entries);
 
-                _networkCache.Save(cacheKey, entries);
+                SaveCacheWithRetry(cacheKey, entries);
 
                 RaiseProgress(
                     $"{rootPath} リスキャン完了 ({entries.Count:N0} 件)",
@@ -538,7 +568,7 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Custom folder rescan failed: {ex.Message}");
+                Debug.WriteLine($"Custom folder rescan failed for {rootPath}: {ex}");
             }
         }
 
@@ -630,7 +660,7 @@ namespace TNDexplorer.Core
 
             // Update timestamp and persist
             _currentSettings.LastRescanTimestamp = DateTime.Now.ToString("o");
-            try { _settingsService.Save(_currentSettings); } catch { }
+            try { _settingsService.Save(_currentSettings); } catch (Exception ex) { Debug.WriteLine($"Settings save failed: {ex.Message}"); }
 
             RaiseProgress("リスキャン完了", _index.TotalCount, IndexingState.Ready);
         }
@@ -708,7 +738,7 @@ namespace TNDexplorer.Core
                             var entries = _index.GetEntriesForDrive(driveIndex);
                             if (entries.Count > 0)
                             {
-                                _networkCache.Save(drive.DriveLetter, entries);
+                                SaveCacheWithRetry(drive.DriveLetter, entries);
                             }
                         }
                     }
@@ -726,7 +756,7 @@ namespace TNDexplorer.Core
                             if (entries.Count > 0)
                             {
                                 string cacheKey = GetCustomFolderCacheKey(folder.FolderPath);
-                                _networkCache.Save(cacheKey, entries);
+                                SaveCacheWithRetry(cacheKey, entries);
                             }
                         }
                     }
@@ -734,7 +764,34 @@ namespace TNDexplorer.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"SaveAllCaches failed: {ex.Message}");
+                Debug.WriteLine($"SaveAllCaches failed: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Save cache with retry for transient IO errors (network glitches, file locks).
+        /// Retries up to 3 times with exponential backoff (200ms, 400ms, 800ms).
+        /// </summary>
+        private void SaveCacheWithRetry(string cacheKey, List<FileEntry> entries)
+        {
+            const int maxRetries = 3;
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    _networkCache.Save(cacheKey, entries);
+                    return;
+                }
+                catch (IOException ex) when (attempt < maxRetries)
+                {
+                    Debug.WriteLine($"Cache save retry {attempt}/{maxRetries} for '{cacheKey}': {ex.Message}");
+                    Thread.Sleep(200 * (1 << (attempt - 1))); // 200ms, 400ms
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Cache save failed for '{cacheKey}': {ex.Message}");
+                    return;
+                }
             }
         }
 

@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Diagnostics;
 using TNDexplorer.Core;
 using TNDexplorer.ViewModels;
 
@@ -30,6 +31,7 @@ namespace TNDexplorer.Views
         private readonly LinkedList<int> _pdfCacheLru = new LinkedList<int>();
         private const int PdfCacheMaxPages = 12;
         private const int PdfPrefetchAhead = 2; // pages to prefetch ahead/behind visible area
+        private readonly List<Task> _pdfRenderTasks = new List<Task>();
 
         public MainWindow()
         {
@@ -54,6 +56,7 @@ namespace TNDexplorer.Views
                 _previewHost = new PreviewHandlerHost();
                 vm.PreviewFileChanged += OnPreviewFileChanged;
                 vm.PreviewVisibilityChanged += OnPreviewVisibilityChanged;
+                vm.FileOpening += OnFileOpening;
             }
         }
 
@@ -116,6 +119,7 @@ namespace TNDexplorer.Views
             _isPdfPreview = false;
             PdfScrollViewer.Visibility = Visibility.Collapsed;
             PdfPagesPanel.Children.Clear();
+            PdfScrollViewer.ScrollToVerticalOffset(0);
             PreviewPlaceholder.Text = "ファイルを選択するとプレビューが表示されます";
             PreviewPlaceholder.Visibility = Visibility.Visible;
 
@@ -155,6 +159,19 @@ namespace TNDexplorer.Views
         {
             if (_previewHost == null) return;
 
+            // PowerPoint conflict: the preview handler's LocalServer32 is POWERPNT.EXE
+            // itself. When PowerPoint is already running, COM connects to the running
+            // instance and the activation/initialization hangs. Skip entirely.
+            if (IsPowerPointFile(filePath) && IsPowerPointRunning())
+            {
+                PreviewPlaceholder.Text =
+                    "PowerPointが起動中のため、このファイルの\n"
+                    + "プレビューを表示できません。\n\n"
+                    + "PowerPointを閉じてから再度お試しください。";
+                PreviewPlaceholder.Visibility = Visibility.Visible;
+                return;
+            }
+
             var hwndSource = PresentationSource.FromVisual(this) as HwndSource;
             if (hwndSource == null) return;
             IntPtr parentHwnd = hwndSource.Handle;
@@ -177,12 +194,11 @@ namespace TNDexplorer.Views
             }
             else
             {
-                // E_FAIL (0x80004005) is typically caused by Zone Identifier security block.
-                // HasZoneIdentifier may fail under elevated admin token, so for E_FAIL
-                // always show the security block guidance regardless of ADS detection result.
-                bool isEFail = !string.IsNullOrEmpty(previewError)
-                    && previewError.IndexOf("80004005", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isEFail)
+                // E_FAIL (0x80004005) and E_NOTIMPL (0x80004001) are typically caused by
+                // Zone Identifier security block on downloaded files.
+                if (!string.IsNullOrEmpty(previewError)
+                    && (previewError.IndexOf("80004005", StringComparison.OrdinalIgnoreCase) >= 0
+                        || previewError.IndexOf("80004001", StringComparison.OrdinalIgnoreCase) >= 0))
                 {
                     PreviewPlaceholder.Text =
                         "このファイルはセキュリティブロックされている\n"
@@ -190,6 +206,12 @@ namespace TNDexplorer.Views
                         + "ファイルのプロパティ → 全般タブ →\n"
                         + "「許可する」にチェックを入れてから\n"
                         + "再度お試しください。";
+                }
+                // E_NOINTERFACE (0x80004002) occurs when COM handler is unavailable
+                else if (!string.IsNullOrEmpty(previewError)
+                    && previewError.IndexOf("80004002", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    PreviewPlaceholder.Text = "このファイル形式はプレビューできません";
                 }
                 else
                 {
@@ -205,6 +227,37 @@ namespace TNDexplorer.Views
             ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif",
             ".ico", ".webp", ".wdp", ".hdp", ".jfif"
         };
+
+        private static bool IsPowerPointFile(string filePath)
+        {
+            string ext = System.IO.Path.GetExtension(filePath)?.ToLowerInvariant();
+            switch (ext)
+            {
+                case ".pptx": case ".pptm": case ".ppt":
+                case ".ppsx": case ".ppsm": case ".pps":
+                case ".potx": case ".potm": case ".pot":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsPowerPointRunning()
+        {
+            // Only detect user-launched PowerPoint (has a visible main window).
+            // COM-launched POWERPNT.EXE for preview handlers runs in the background
+            // without a main window and should NOT be treated as a conflict.
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName("POWERPNT"))
+                {
+                    if (proc.MainWindowHandle != IntPtr.Zero)
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
 
         private static bool IsImageFile(string filePath)
         {
@@ -312,17 +365,18 @@ namespace TNDexplorer.Views
                     _currentPreviewPath = filePath;
                     _isPdfPreview = true;
 
-                    // Build placeholders and render visible pages
-                    RebuildPdfLayout();
-
+                    // Show ScrollViewer and force layout BEFORE building PDF pages.
+                    // This ensures GetPdfPanelWidth() uses the actual ViewportWidth
+                    // instead of a fallback estimate, preventing a double-layout flicker.
                     PdfScrollViewer.Visibility = Visibility.Visible;
                     PreviewPlaceholder.Visibility = Visibility.Collapsed;
+                    PdfScrollViewer.UpdateLayout();
 
-                    // Attach scroll event for virtualization
+                    // Attach scroll event, then build layout and render
                     PdfScrollViewer.ScrollChanged -= PdfScrollViewer_ScrollChanged;
                     PdfScrollViewer.ScrollChanged += PdfScrollViewer_ScrollChanged;
 
-                    // Render initially visible pages
+                    RebuildPdfLayout();
                     RenderVisiblePdfPages();
                 }));
             }, ct);
@@ -333,12 +387,15 @@ namespace TNDexplorer.Views
         /// </summary>
         private double GetPdfPanelWidth()
         {
-            double w = PdfScrollViewer.ViewportWidth;
-            if (w <= 0) w = PdfScrollViewer.ActualWidth;
+            // Use ActualWidth (not ViewportWidth) so the result is stable regardless
+            // of whether the vertical scrollbar is visible. This prevents layout
+            // oscillation where scrollbar appearance changes ViewportWidth → re-layout → flicker.
+            double w = PdfScrollViewer.ActualWidth;
             if (w <= 0) w = PreviewHostBorder.ActualWidth;
             if (w <= 0) w = PreviewColumn.ActualWidth;
             if (w <= 0) w = 300;
-            double panelWidth = w - 18; // scrollbar
+            // Always reserve space for the vertical scrollbar to keep page width stable
+            double panelWidth = w - SystemParameters.VerticalScrollBarWidth - 2;
             return panelWidth < 80 ? 80 : panelWidth;
         }
 
@@ -353,10 +410,9 @@ namespace TNDexplorer.Views
             double panelWidth = GetPdfPanelWidth();
             _pdfLastPanelWidth = panelWidth;
 
-            // Render at 1.5x physical pixel resolution (compromise between quality and memory)
-            // 2x caused freezes on standard-spec PCs due to excessive memory usage
+            // Render at 1x physical pixel resolution for fast rendering and low memory usage
             var dpi = VisualTreeHelper.GetDpi(this);
-            _pdfDocHandle.RenderWidth = (uint)(panelWidth * dpi.DpiScaleX * 1.5);
+            _pdfDocHandle.RenderWidth = (uint)(panelWidth * dpi.DpiScaleX);
 
             // Clear cache — bitmaps are rendered at the old width
             _pdfPageCache.Clear();
@@ -483,6 +539,10 @@ namespace TNDexplorer.Views
             if (cts == null) return;
             var ct = cts.Token;
 
+            // Clean up completed tasks to prevent unbounded accumulation
+            if (_pdfRenderTasks.Count > 20)
+                _pdfRenderTasks.RemoveAll(t => t.IsCompleted);
+
             // Render pages that are not yet cached
             for (int i = renderFrom; i <= renderTo; i++)
             {
@@ -498,14 +558,15 @@ namespace TNDexplorer.Views
                 var docHandle = _pdfDocHandle;
                 if (docHandle == null) return;
 
-                Task.Run(() =>
+                var renderTask = Task.Run(() =>
                 {
                     if (ct.IsCancellationRequested) return;
                     System.Drawing.Bitmap bitmap = null;
                     try
                     {
-                        bitmap = docHandle.RenderPage(pageIndex);
+                        bitmap = docHandle.RenderPage(pageIndex, ct);
                     }
+                    catch (OperationCanceledException) { return; }
                     catch { }
 
                     if (bitmap == null || ct.IsCancellationRequested)
@@ -536,6 +597,7 @@ namespace TNDexplorer.Views
                         bitmap.Dispose();
                     }
                 });
+                _pdfRenderTasks.Add(renderTask);
             }
         }
 
@@ -592,7 +654,12 @@ namespace TNDexplorer.Views
             }
         }
 
-        private void CancelPdfRendering()
+        /// <summary>
+        /// Cancels PDF rendering and releases resources.
+        /// When isClosing=true (app exit), skips COM Dispose to avoid STA/MTA
+        /// cross-apartment deadlock — OS reclaims all COM objects on process exit.
+        /// </summary>
+        private void CancelPdfRendering(bool isClosing = false)
         {
             PdfScrollViewer.ScrollChanged -= PdfScrollViewer_ScrollChanged;
 
@@ -604,13 +671,31 @@ namespace TNDexplorer.Views
             if (_pdfRenderCts != null)
             {
                 try { _pdfRenderCts.Cancel(); } catch { }
+            }
+
+            // Wait for background render tasks to finish.
+            // With CancellationToken flowing through WaitForAsyncAction, tasks should
+            // exit within ~20ms of cancellation. 3s timeout is a safety net.
+            if (_pdfRenderTasks.Count > 0)
+            {
+                try { Task.WhenAll(_pdfRenderTasks).Wait(3000); }
+                catch { }
+                _pdfRenderTasks.Clear();
+            }
+
+            if (_pdfRenderCts != null)
+            {
                 try { _pdfRenderCts.Dispose(); } catch { }
                 _pdfRenderCts = null;
             }
 
             if (_pdfDocHandle != null)
             {
-                _pdfDocHandle.Dispose();
+                // Normal operation (preview switch): Dispose to free resources.
+                // App exit: Skip Dispose to avoid COM cross-apartment deadlock.
+                // OS reclaims all COM objects when the process terminates.
+                if (!isClosing)
+                    _pdfDocHandle.Dispose();
                 _pdfDocHandle = null;
             }
 
@@ -682,15 +767,67 @@ namespace TNDexplorer.Views
             _previewHost.Reposition(left, top, width, height);
         }
 
+        /// <summary>
+        /// Called before a file is opened (double-click / Enter / context menu).
+        /// For PowerPoint files only: unloads the COM preview and terminates the
+        /// background POWERPNT.EXE COM server. PowerPoint is single-instance,
+        /// so the COM server process blocks normal file opening.
+        /// Word/Excel previews are left intact (stream-based init avoids file locking).
+        /// </summary>
+        private void OnFileOpening()
+        {
+            if (_currentPreviewPath == null || !IsPowerPointFile(_currentPreviewPath))
+                return;
+
+            _previewHost?.UnloadPreview();
+            _currentPreviewPath = null;
+
+            // Terminate background POWERPNT.EXE (COM servers without visible windows).
+            // User-launched PowerPoint (with main window) is left untouched.
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName("POWERPNT"))
+                {
+                    try
+                    {
+                        if (proc.MainWindowHandle == IntPtr.Zero)
+                        {
+                            proc.Kill();
+                            proc.WaitForExit(500);
+                        }
+                    }
+                    catch { }
+                    finally { proc.Dispose(); }
+                }
+            }
+            catch { }
+        }
+
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            CancelPdfRendering();
-            _previewHost?.Dispose();
+            // Safety kill timer: forcefully terminate if shutdown hangs (COM deadlock, finalizer hang, etc.)
+            var killThread = new Thread(() =>
+            {
+                Thread.Sleep(5000);
+                try { Process.GetCurrentProcess().Kill(); } catch { }
+            });
+            killThread.IsBackground = true;
+            killThread.Start();
 
-            var vm = DataContext as MainViewModel;
-            vm?.Dispose();
+            // Cancel render tasks only; skip COM Dispose to avoid STA/MTA deadlock
+            try { CancelPdfRendering(isClosing: true); } catch { }
 
-            Application.Current.Shutdown();
+            // Skip _previewHost.Dispose() — COM preview handlers can also deadlock on exit.
+            // OS reclaims all COM objects when the process terminates.
+
+            try
+            {
+                var vm = DataContext as MainViewModel;
+                vm?.Dispose();
+            }
+            catch { }
+
+            // Force exit to terminate lingering background threads (USN monitor, etc.)
             Environment.Exit(0);
         }
 

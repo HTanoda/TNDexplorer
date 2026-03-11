@@ -284,6 +284,7 @@ namespace TNDexplorer.ViewModels
 
         public event Action PreviewVisibilityChanged;
         public event Action<string> PreviewFileChanged;
+        public event Action FileOpening;
 
         // Favorites
         public ObservableCollection<FavoriteFilterItem> FavoriteFilters { get; }
@@ -821,6 +822,7 @@ namespace TNDexplorer.ViewModels
         private void ExecuteOpenFile()
         {
             if (SelectedResult == null) return;
+            FileOpening?.Invoke();
             _fileOps.OpenFile(SelectedResult.FullPath);
         }
 

@@ -127,6 +127,13 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public bool ContentSearchIncludeFilename { get; set; } = true;
+
+        /// <summary>
+        /// 検索結果一覧の列順序。ヘッダー名のリスト（例: ["パス","名前","サイズ","更新日時"]）。
+        /// nullまたは空の場合はデフォルト順序（名前→パス→サイズ→更新日時）。
+        /// </summary>
+        [DataMember]
+        public List<string> ColumnOrder { get; set; }
     }
 
     [DataContract]

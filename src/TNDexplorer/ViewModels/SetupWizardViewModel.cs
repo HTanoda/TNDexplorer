@@ -77,6 +77,7 @@ namespace TNDexplorer.ViewModels
                 {
                     "$Recycle.Bin",
                     "System Volume Information",
+                    "AppData",
                 },
             };
 

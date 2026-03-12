@@ -658,9 +658,15 @@ namespace TNDexplorer.Core
                 // Individual rescan errors are already handled in RescanNetworkDrive/RescanCustomFolder
             }
 
-            // Update timestamp and persist
+            // Update timestamp and persist (read-modify-write to avoid overwriting dialog changes)
             _currentSettings.LastRescanTimestamp = DateTime.Now.ToString("o");
-            try { _settingsService.Save(_currentSettings); } catch (Exception ex) { Debug.WriteLine($"Settings save failed: {ex.Message}"); }
+            try
+            {
+                var fresh = _settingsService.Load();
+                fresh.LastRescanTimestamp = _currentSettings.LastRescanTimestamp;
+                _settingsService.Save(fresh);
+            }
+            catch (Exception ex) { Debug.WriteLine($"Settings save failed: {ex.Message}"); }
 
             RaiseProgress("リスキャン完了", _index.TotalCount, IndexingState.Ready);
         }

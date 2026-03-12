@@ -823,7 +823,7 @@ namespace TNDexplorer.Views
 
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
-            // Save column order before starting shutdown
+            // Save column order (quick, no COM involvement)
             try
             {
                 var gridView = ResultsListView.View as GridView;
@@ -840,30 +840,26 @@ namespace TNDexplorer.Views
             }
             catch { }
 
-            // Safety kill timer: forcefully terminate if shutdown hangs (COM deadlock, finalizer hang, etc.)
-            var killThread = new Thread(() =>
-            {
-                Thread.Sleep(5000);
-                try { Process.GetCurrentProcess().Kill(); } catch { }
-            });
-            killThread.IsBackground = true;
-            killThread.Start();
+            // Cancel PDF rendering signal only (don't wait for tasks)
+            try { _pdfRenderCts?.Cancel(); } catch { }
 
-            // Cancel render tasks only; skip COM Dispose to avoid STA/MTA deadlock
-            try { CancelPdfRendering(isClosing: true); } catch { }
-
-            // Skip _previewHost.Dispose() — COM preview handlers can also deadlock on exit.
-            // OS reclaims all COM objects when the process terminates.
-
+            // Dispose ViewModel (cancels search, stops timers — no COM)
+            // Run on thread pool with timeout to prevent deadlock
             try
             {
-                var vm = DataContext as MainViewModel;
-                vm?.Dispose();
+                var disposeTask = Task.Run(() =>
+                {
+                    try { (DataContext as MainViewModel)?.Dispose(); } catch { }
+                });
+                disposeTask.Wait(2000);
             }
             catch { }
 
-            // Force exit to terminate lingering background threads (USN monitor, etc.)
-            Environment.Exit(0);
+            // Immediate process termination via TerminateProcess.
+            // Unlike Environment.Exit(0), this does NOT run CLR shutdown or COM finalizers,
+            // so it cannot deadlock on STA/MTA cross-apartment COM release.
+            // OS reclaims all resources (COM objects, handles, memory) on process exit.
+            Process.GetCurrentProcess().Kill();
         }
 
         private void ResultsListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)

@@ -440,14 +440,19 @@ namespace TNDexplorer.ViewModels
 
         private void SaveFavorites()
         {
-            _settings.FavoriteFilters = FavoriteFilters.Select(f => new FavoriteFilter
+            var favorites = FavoriteFilters.Select(f => new FavoriteFilter
             {
                 Name = f.Name,
                 Extension = f.Extension,
                 FolderPath = f.FolderPath,
                 Keyword = f.Keyword,
             }).ToList();
-            _settingsService.Save(_settings);
+            _settings.FavoriteFilters = favorites;
+            // ファイルから最新設定を読み込み、FavoriteFilters だけ更新して保存
+            // （古い _settings 全体を書き戻さない）
+            var fresh = _settingsService.Load();
+            fresh.FavoriteFilters = favorites;
+            _settingsService.Save(fresh);
         }
 
         private void AddFavorite()
@@ -871,6 +876,16 @@ namespace TNDexplorer.ViewModels
             _settings.FullTextTargetExtensions = settings.FullTextTargetExtensions;
             _settings.FullTextMaxFileSizeMB = settings.FullTextMaxFileSizeMB;
             _settings.ContentSearchIncludeFilename = settings.ContentSearchIncludeFilename;
+        }
+
+        public AppSettings GetSettings() => _settings;
+
+        public void SaveColumnOrder(List<string> order)
+        {
+            // ファイルから最新設定を読み込み、ColumnOrder だけ更新して保存
+            var fresh = _settingsService.Load();
+            fresh.ColumnOrder = order;
+            _settingsService.Save(fresh);
         }
 
         public void Dispose()

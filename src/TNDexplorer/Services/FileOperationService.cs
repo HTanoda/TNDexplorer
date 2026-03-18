@@ -53,7 +53,22 @@ namespace TNDexplorer.Services
 
         public void CopyPathToClipboard(string fullPath)
         {
-            ClipboardRetry(() => Clipboard.SetText(fullPath), "パスのコピーに失敗しました");
+            // Use Win32 clipboard API directly instead of WPF Clipboard.SetText.
+            // WPF uses OLE clipboard (COM-based) which throws CLIPBRD_E_CANT_OPEN
+            // in admin-elevated processes. Win32 API avoids this entirely.
+            const int maxRetries = 5;
+            const int retryDelayMs = 50;
+
+            for (int i = 0; i < maxRetries; i++)
+            {
+                if (NativeSetClipboardText(fullPath))
+                    return;
+
+                Thread.Sleep(retryDelayMs);
+            }
+
+            MessageBox.Show("パスのコピーに失敗しました:\nクリップボードを開けませんでした。",
+                "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         public void CopyFileToClipboard(string fullPath)
@@ -66,7 +81,59 @@ namespace TNDexplorer.Services
             }, "コピーに失敗しました");
         }
 
-        private static void ClipboardRetry(Action action, string errorTitle, int maxRetries = 3, int retryDelayMs = 100)
+        /// <summary>
+        /// Sets clipboard text using Win32 API (OpenClipboard/SetClipboardData).
+        /// Returns true on success, false if clipboard is busy.
+        /// </summary>
+        private static bool NativeSetClipboardText(string text)
+        {
+            if (!NativeMethods.OpenClipboard(IntPtr.Zero))
+                return false;
+
+            try
+            {
+                NativeMethods.EmptyClipboard();
+
+                int byteCount = (text.Length + 1) * 2; // UTF-16 + null terminator
+                IntPtr hGlobal = NativeMethods.GlobalAlloc(
+                    NativeMethods.GMEM_MOVEABLE, (UIntPtr)byteCount);
+
+                if (hGlobal == IntPtr.Zero)
+                    return false;
+
+                IntPtr pGlobal = NativeMethods.GlobalLock(hGlobal);
+                if (pGlobal == IntPtr.Zero)
+                {
+                    NativeMethods.GlobalFree(hGlobal);
+                    return false;
+                }
+
+                try
+                {
+                    Marshal.Copy(text.ToCharArray(), 0, pGlobal, text.Length);
+                    Marshal.WriteInt16(pGlobal, text.Length * 2, 0); // null terminator
+                }
+                finally
+                {
+                    NativeMethods.GlobalUnlock(hGlobal);
+                }
+
+                if (NativeMethods.SetClipboardData(NativeMethods.CF_UNICODETEXT, hGlobal) == IntPtr.Zero)
+                {
+                    NativeMethods.GlobalFree(hGlobal);
+                    return false;
+                }
+
+                // SetClipboardData succeeded — ownership transferred to OS, don't free
+                return true;
+            }
+            finally
+            {
+                NativeMethods.CloseClipboard();
+            }
+        }
+
+        private static void ClipboardRetry(Action action, string errorTitle, int maxRetries = 5, int retryDelayMs = 50)
         {
             for (int i = 0; i < maxRetries; i++)
             {
@@ -75,7 +142,7 @@ namespace TNDexplorer.Services
                     action();
                     return;
                 }
-                catch (COMException) when (i < maxRetries - 1)
+                catch (ExternalException) when (i < maxRetries - 1)
                 {
                     Thread.Sleep(retryDelayMs);
                 }

@@ -72,6 +72,7 @@ namespace TNDexplorer
             {
                 var settingsVm = new SettingsViewModel(settingsService);
                 settingsVm.ManualRescanAction = () => _indexManager.RequestManualRescan();
+                settingsVm.RescanCustomFolderAction = fp => _indexManager.RequestRescanCustomFolder(fp);
                 var settingsDialog = new SettingsDialog
                 {
                     DataContext = settingsVm,

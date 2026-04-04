@@ -58,6 +58,10 @@
                                   Padding="6,3" Background="Transparent" BorderThickness="1"
                                   BorderBrush="#FFD1D1D1" Cursor="Hand" FontSize="11"
                                   Margin="0,0,4,0" ToolTip="高度な検索オプション"/>
+                    <Button Content="CSV出力" Command="{Binding ExportCsvCommand}"
+                            Padding="6,3" Background="Transparent" BorderThickness="1"
+                            BorderBrush="#FFD1D1D1" Cursor="Hand" FontSize="11"
+                            Margin="0,0,4,0" ToolTip="検索結果をCSVファイルに出力"/>
                     <Button Content="設定" Command="{Binding OpenSettingsCommand}"
                             Padding="8,4" Background="Transparent" BorderThickness="0"
                             Cursor="Hand" FontSize="12"/>

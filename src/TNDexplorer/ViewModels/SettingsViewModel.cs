@@ -232,6 +232,12 @@ namespace TNDexplorer.ViewModels
         /// </summary>
         public Action ManualRescanAction { get; set; }
 
+        /// <summary>
+        /// Callback to trigger rescan for a single custom folder.
+        /// Set by App.xaml.cs before showing the dialog.
+        /// </summary>
+        public Action<string> RescanCustomFolderAction { get; set; }
+
         public string FullTextTargetExtensionsText
         {
             get => _fullTextTargetExtensionsText;

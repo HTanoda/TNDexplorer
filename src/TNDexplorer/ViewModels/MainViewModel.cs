@@ -362,6 +362,7 @@ namespace TNDexplorer.ViewModels
         public RelayCommand BrowseFolderCommand { get; }
         public RelayCommand OpenHelpCommand { get; }
         public RelayCommand OpenAboutCommand { get; }
+        public RelayCommand ExportCsvCommand { get; }
 
         public event Action RequestOpenSettings;
         public event Action RequestOpenHelp;
@@ -389,6 +390,7 @@ namespace TNDexplorer.ViewModels
             BrowseFolderCommand = new RelayCommand(BrowseFolder);
             OpenHelpCommand = new RelayCommand(() => RequestOpenHelp?.Invoke());
             OpenAboutCommand = new RelayCommand(() => RequestOpenAbout?.Invoke());
+            ExportCsvCommand = new RelayCommand(ExecuteExportCsv, () => ResultCount > 0);
 
             _indexManager.ProgressChanged += OnIndexingProgress;
 
@@ -853,6 +855,20 @@ namespace TNDexplorer.ViewModels
         {
             if (SelectedResult == null) return;
             _fileOps.ShowProperties(SelectedResult.FullPath);
+        }
+
+        private void ExecuteExportCsv()
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "CSV ファイル (*.csv)|*.csv",
+                DefaultExt = ".csv",
+                FileName = "検索結果_" + DateTime.Now.ToString("yyyyMMdd_HHmmss")
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                _fileOps.ExportResultsToCsv(_results, dialog.FileName);
+            }
         }
 
         public void OnItemDoubleClick()

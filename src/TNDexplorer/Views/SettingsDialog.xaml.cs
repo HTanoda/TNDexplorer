@@ -149,6 +149,30 @@ namespace TNDexplorer.Views
             }
         }
 
+        private void OnRescanSelectedClick(object sender, RoutedEventArgs e)
+        {
+            var vm = DataContext as SettingsViewModel;
+            var selected = CustomFoldersList.SelectedItem as CustomFolderItem;
+            if (selected == null)
+            {
+                MessageBox.Show("更新するフォルダを選択してください。",
+                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (vm?.RescanCustomFolderAction != null)
+            {
+                vm.RescanCustomFolderAction(selected.FolderPath);
+                MessageBox.Show($"{selected.FolderPath} の更新を開始しました。バックグラウンドで実行されます。",
+                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("リスキャンを実行するにはアプリケーションの再起動が必要です。",
+                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         private void OnManualRescanClick(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;

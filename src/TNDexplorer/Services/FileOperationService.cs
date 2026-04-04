@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows;
+using TNDexplorer.Models;
 using TNDexplorer.Native;
 
 namespace TNDexplorer.Services
@@ -153,6 +156,50 @@ namespace TNDexplorer.Services
                     return;
                 }
             }
+        }
+
+        public void ExportResultsToCsv(IReadOnlyList<FileResultItem> results, string filePath)
+        {
+            try
+            {
+                using (var writer = new StreamWriter(filePath, false, new UTF8Encoding(true)))
+                {
+                    // CSV header
+                    writer.WriteLine("ファイル名,フォルダ,サイズ(バイト),更新日時,拡張子");
+
+                    foreach (var item in results)
+                    {
+                        writer.Write(EscapeCsvField(item.Name));
+                        writer.Write(',');
+                        writer.Write(EscapeCsvField(item.Path));
+                        writer.Write(',');
+                        if (!item.IsDirectory)
+                            writer.Write(item.Size);
+                        writer.Write(',');
+                        writer.Write(item.Modified.ToString("yyyy-MM-dd HH:mm:ss"));
+                        writer.Write(',');
+                        writer.Write(EscapeCsvField(item.Extension));
+                        writer.WriteLine();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"CSVファイルの保存に失敗しました:\n{ex.Message}",
+                    "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private static string EscapeCsvField(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+
+            if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+            {
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            }
+            return value;
         }
 
         public void ShowProperties(string fullPath)

@@ -680,6 +680,34 @@ namespace TNDexplorer.Core
             Task.Run(() => ExecuteRescanAll());
         }
 
+        /// <summary>
+        /// Trigger a rescan for a single custom folder.
+        /// Runs asynchronously in the background.
+        /// </summary>
+        public void RequestRescanCustomFolder(string folderPath)
+        {
+            if (_cts == null || _cts.IsCancellationRequested) return;
+            if (_currentSettings == null) return;
+            if (string.IsNullOrWhiteSpace(folderPath)) return;
+            if (!_customFolderIndexMap.TryGetValue(folderPath, out byte driveIndex)) return;
+
+            string cacheKey = GetCustomFolderCacheKey(folderPath);
+            Task.Run(() =>
+            {
+                RaiseProgress($"{folderPath} を更新中...", _index.TotalCount, IndexingState.Indexing);
+                try
+                {
+                    RescanCustomFolder(folderPath, cacheKey, driveIndex,
+                        _currentSettings.ExcludePatterns, _cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Rescan failed for {folderPath}: {ex.Message}");
+                }
+                RaiseProgress("更新完了", _index.TotalCount, IndexingState.Ready);
+            });
+        }
+
         private void OnDriveChanged(DriveChangeEvent evt)
         {
             // Notify UI about drive changes

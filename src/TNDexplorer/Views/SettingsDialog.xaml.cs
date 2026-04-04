@@ -194,12 +194,10 @@ namespace TNDexplorer.Views
             var vm = DataContext as SettingsViewModel;
             if (vm == null) return;
 
-            var selectedItems = vm.CustomFolders.Where(f => f.IsSelected).ToList();
+            var selectedItems = CustomFoldersList.SelectedItems.Cast<CustomFolderItem>().ToList();
             if (selectedItems.Count == 0)
             {
-                // If none checked, remove all unchecked (interpretation: remove selected via checkbox)
-                // Better: show message
-                MessageBox.Show("削除するフォルダのチェックを外して選択してください。", "フォルダ",
+                MessageBox.Show("削除するフォルダを選択してください。", "フォルダ",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }

@@ -65,7 +65,8 @@
                                    Foreground="Gray" Margin="0,0,0,5"/>
                         <ListBox x:Name="CustomFoldersList"
                                  ItemsSource="{Binding CustomFolders}" Margin="0,0,0,5"
-                                 MaxHeight="120" BorderThickness="1" BorderBrush="#FFD1D1D1">
+                                 MaxHeight="120" BorderThickness="1" BorderBrush="#FFD1D1D1"
+                                 SelectionMode="Extended">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <CheckBox IsChecked="{Binding IsSelected}" Margin="2,1">

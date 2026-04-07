@@ -91,6 +91,8 @@ namespace TNDexplorer.Native
         internal static extern IntPtr GlobalFree(IntPtr hMem);
 
         internal const uint CF_UNICODETEXT = 13;
+        internal const uint CF_HDROP = 15;
         internal const uint GMEM_MOVEABLE = 0x0002;
+        internal const uint GMEM_ZEROINIT = 0x0040;
     }
 }

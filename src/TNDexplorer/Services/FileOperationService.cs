@@ -76,12 +76,87 @@ namespace TNDexplorer.Services
 
         public void CopyFileToClipboard(string fullPath)
         {
-            ClipboardRetry(() =>
+            // Use Win32 clipboard API directly instead of WPF Clipboard.SetFileDropList.
+            // WPF uses OLE clipboard (COM-based) which throws CLIPBRD_E_CANT_OPEN
+            // in admin-elevated processes.
+            const int maxRetries = 5;
+            const int retryDelayMs = 50;
+
+            for (int i = 0; i < maxRetries; i++)
             {
-                var fileCollection = new System.Collections.Specialized.StringCollection();
-                fileCollection.Add(fullPath);
-                Clipboard.SetFileDropList(fileCollection);
-            }, "コピーに失敗しました");
+                if (NativeSetClipboardFileDropList(fullPath))
+                    return;
+
+                Thread.Sleep(retryDelayMs);
+            }
+
+            MessageBox.Show("コピーに失敗しました:\nクリップボードを開けませんでした。",
+                "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        /// <summary>
+        /// Sets clipboard file drop list using Win32 API (CF_HDROP format).
+        /// Returns true on success, false if clipboard is busy.
+        /// </summary>
+        private static bool NativeSetClipboardFileDropList(string filePath)
+        {
+            if (!NativeMethods.OpenClipboard(IntPtr.Zero))
+                return false;
+
+            try
+            {
+                NativeMethods.EmptyClipboard();
+
+                // DROPFILES structure: 20 bytes header + file path (UTF-16) + double null terminator
+                int headerSize = 20; // sizeof(DROPFILES)
+                int fileBytes = (filePath.Length + 1) * 2; // file path + null terminator (UTF-16)
+                int totalSize = headerSize + fileBytes + 2; // + final null terminator
+
+                IntPtr hGlobal = NativeMethods.GlobalAlloc(
+                    NativeMethods.GMEM_MOVEABLE | NativeMethods.GMEM_ZEROINIT,
+                    (UIntPtr)totalSize);
+
+                if (hGlobal == IntPtr.Zero)
+                    return false;
+
+                IntPtr pGlobal = NativeMethods.GlobalLock(hGlobal);
+                if (pGlobal == IntPtr.Zero)
+                {
+                    NativeMethods.GlobalFree(hGlobal);
+                    return false;
+                }
+
+                try
+                {
+                    // DROPFILES.pFiles = offset to file list (20 = header size)
+                    Marshal.WriteInt32(pGlobal, 0, headerSize);
+                    // DROPFILES.pt.x = 0, pt.y = 0 (already zeroed)
+                    // DROPFILES.fNC = FALSE (already zeroed)
+                    // DROPFILES.fWide = TRUE (Unicode)
+                    Marshal.WriteInt32(pGlobal, 16, 1);
+
+                    // Write file path after header
+                    IntPtr pFiles = new IntPtr(pGlobal.ToInt64() + headerSize);
+                    Marshal.Copy(filePath.ToCharArray(), 0, pFiles, filePath.Length);
+                    // Null terminators already zeroed by GMEM_ZEROINIT
+                }
+                finally
+                {
+                    NativeMethods.GlobalUnlock(hGlobal);
+                }
+
+                if (NativeMethods.SetClipboardData(NativeMethods.CF_HDROP, hGlobal) == IntPtr.Zero)
+                {
+                    NativeMethods.GlobalFree(hGlobal);
+                    return false;
+                }
+
+                return true;
+            }
+            finally
+            {
+                NativeMethods.CloseClipboard();
+            }
         }
 
         /// <summary>

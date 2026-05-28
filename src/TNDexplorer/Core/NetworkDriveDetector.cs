@@ -192,6 +192,11 @@ namespace TNDexplorer.Core
             {
                 LogDriveMapping($"  Cache entry: {kvp.Key} -> {kvp.Value}");
             }
+
+            // Acquire and cache a user token for impersonation during network scans.
+            // This token is kept for the process lifetime so that Task.Run workers
+            // can call ImpersonateLoggedOnUser without re-acquiring each time.
+            AcquireUserToken();
         }
 
         /// <summary>
@@ -337,6 +342,11 @@ namespace TNDexplorer.Core
         // Once set to true, ParseNetUseOutputAsUser() returns empty immediately
         // to avoid repeated Win32 API calls that are known to fail in this environment.
         private static bool _userTokenUnavailable = false;
+
+        // Long-lived user token for impersonation during network drive scanning.
+        // Acquired once at startup, reused for all scan tasks. Closed on Dispose.
+        private static IntPtr _cachedUserToken = IntPtr.Zero;
+        private static readonly object _tokenLock = new object();
 
         public List<NetworkDriveInfo> DetectMappedDrives()
         {
@@ -978,6 +988,122 @@ namespace TNDexplorer.Core
                 }
 
                 knownDrives = currentDrives;
+            }
+        }
+
+        /// <summary>
+        /// Acquire a long-lived user (non-elevated) token and cache it for impersonation.
+        /// Uses the same linked-token / explorer-token fallback as ParseNetUseOutputAsUser.
+        /// </summary>
+        private void AcquireUserToken()
+        {
+            if (_userTokenUnavailable) return;
+
+            lock (_tokenLock)
+            {
+                if (_cachedUserToken != IntPtr.Zero) return; // Already acquired
+
+                IntPtr processToken = IntPtr.Zero;
+                IntPtr linkedToken = IntPtr.Zero;
+
+                try
+                {
+                    if (!OpenProcessToken(GetCurrentProcess(),
+                        TOKEN_QUERY | TOKEN_DUPLICATE, out processToken))
+                    {
+                        LogDriveMapping("AcquireUserToken: OpenProcessToken FAILED");
+                        return;
+                    }
+
+                    int returnLength;
+                    if (!GetTokenInformation(processToken, TokenLinkedToken,
+                        out linkedToken, IntPtr.Size, out returnLength)
+                        || linkedToken == IntPtr.Zero)
+                    {
+                        LogDriveMapping("AcquireUserToken: GetTokenInformation(LinkedToken) FAILED or NULL");
+                        // Fall through to explorer fallback
+                    }
+                    else
+                    {
+                        IntPtr primary;
+                        if (DuplicateTokenEx(linkedToken, MAXIMUM_ALLOWED, IntPtr.Zero,
+                            SecurityImpersonation, TokenPrimary, out primary))
+                        {
+                            _cachedUserToken = primary;
+                            LogDriveMapping("AcquireUserToken: Cached via linked token");
+                            return;
+                        }
+                        LogDriveMapping("AcquireUserToken: DuplicateTokenEx from linked token FAILED, trying explorer");
+                    }
+
+                    // Fallback: explorer.exe token
+                    IntPtr explorerToken = TryGetTokenFromExplorer();
+                    if (explorerToken != IntPtr.Zero)
+                    {
+                        _cachedUserToken = explorerToken;
+                        LogDriveMapping("AcquireUserToken: Cached via explorer.exe token");
+                    }
+                    else
+                    {
+                        LogDriveMapping("AcquireUserToken: All approaches failed — network scans will run as admin");
+                    }
+                }
+                finally
+                {
+                    if (linkedToken != IntPtr.Zero) CloseHandle(linkedToken);
+                    if (processToken != IntPtr.Zero) CloseHandle(processToken);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Execute an action under the non-elevated user's impersonation context.
+        /// If no user token is available, the action runs as-is (admin context).
+        /// Thread-safe: each call pairs ImpersonateLoggedOnUser with RevertToSelf
+        /// in a try/finally to prevent token leakage on ThreadPool threads.
+        /// </summary>
+        public static void RunImpersonated(Action action)
+        {
+            IntPtr token = _cachedUserToken;
+            if (token == IntPtr.Zero)
+            {
+                // No user token available — run without impersonation
+                action();
+                return;
+            }
+
+            if (!ImpersonateLoggedOnUser(token))
+            {
+                int err = Marshal.GetLastWin32Error();
+                Debug.WriteLine($"RunImpersonated: ImpersonateLoggedOnUser failed (Win32 error {err})");
+                // Fallback: run without impersonation
+                action();
+                return;
+            }
+
+            try
+            {
+                action();
+            }
+            finally
+            {
+                RevertToSelf();
+            }
+        }
+
+        /// <summary>
+        /// Release the cached user token. Call on application shutdown.
+        /// </summary>
+        public static void ReleaseUserToken()
+        {
+            lock (_tokenLock)
+            {
+                if (_cachedUserToken != IntPtr.Zero)
+                {
+                    CloseHandle(_cachedUserToken);
+                    _cachedUserToken = IntPtr.Zero;
+                    LogDriveMapping("ReleaseUserToken: Cached token released");
+                }
             }
         }
     }

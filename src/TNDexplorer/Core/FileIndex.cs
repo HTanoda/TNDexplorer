@@ -460,7 +460,9 @@ namespace TNDexplorer.Core
             }
 
             string driveLetter = _driveLetters[driveIndex] ?? "?:";
-            string path = driveLetter + "\\" + string.Join("\\", parts);
+            string path = parts.Count == 0
+                ? driveLetter
+                : driveLetter + "\\" + string.Join("\\", parts);
 
             _pathCache[key] = path;
             return path;

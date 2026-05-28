@@ -101,9 +101,11 @@ namespace TNDexplorer.Core
                     _index.SetDriveLetter(driveIndex, drive.DriveLetter);
                     _networkDriveIndexMap[drive.DriveLetter] = driveIndex;
 
-                    networkTasks.Add(Task.Run(() => IndexNetworkDriveWithCache(
-                        rootPath, drive.DriveLetter, driveIndex,
-                        settings.ExcludePatterns, _cts.Token)));
+                    networkTasks.Add(Task.Run(() =>
+                        NetworkDriveDetector.RunImpersonated(() =>
+                            IndexNetworkDriveWithCache(
+                                rootPath, drive.DriveLetter, driveIndex,
+                                settings.ExcludePatterns, _cts.Token))));
                 }
 
                 // Index custom folders (filesystem enumeration, with cache support)
@@ -116,7 +118,15 @@ namespace TNDexplorer.Core
 
                         // ドライブレター→UNCパス変換（管理者セッションではVBS非永続マッピングが見えないため）
                         string actualPath = ResolveCustomFolderPath(folder.FolderPath);
-                        if (!System.IO.Directory.Exists(actualPath)) continue;
+
+                        // Directory.Exists must also run under user impersonation
+                        // because the admin session lacks NAS credentials
+                        bool exists = false;
+                        NetworkDriveDetector.RunImpersonated(() =>
+                        {
+                            exists = System.IO.Directory.Exists(actualPath);
+                        });
+                        if (!exists) continue;
 
                         byte driveIndex = _nextDriveIndex++;
                         // Use folder path as a pseudo drive letter
@@ -125,9 +135,11 @@ namespace TNDexplorer.Core
                         _customFolderIndexMap[folder.FolderPath] = driveIndex;
 
                         string rootPath = actualPath;
-                        customFolderTasks.Add(Task.Run(() => IndexCustomFolderWithCache(
-                            rootPath, driveIndex,
-                            settings.ExcludePatterns, _cts.Token)));
+                        customFolderTasks.Add(Task.Run(() =>
+                            NetworkDriveDetector.RunImpersonated(() =>
+                                IndexCustomFolderWithCache(
+                                    rootPath, driveIndex,
+                                    settings.ExcludePatterns, _cts.Token))));
                     }
                 }
 
@@ -627,9 +639,11 @@ namespace TNDexplorer.Core
                 if (_networkDriveIndexMap.TryGetValue(drive.DriveLetter, out byte driveIndex))
                 {
                     string rootPath = drive.DriveLetter + "\\";
-                    tasks.Add(Task.Run(() => RescanNetworkDrive(
-                        rootPath, drive.DriveLetter, driveIndex,
-                        _currentSettings.ExcludePatterns, _cts.Token)));
+                    tasks.Add(Task.Run(() =>
+                        NetworkDriveDetector.RunImpersonated(() =>
+                            RescanNetworkDrive(
+                                rootPath, drive.DriveLetter, driveIndex,
+                                _currentSettings.ExcludePatterns, _cts.Token))));
                 }
             }
 
@@ -642,9 +656,11 @@ namespace TNDexplorer.Core
                     if (_customFolderIndexMap.TryGetValue(folder.FolderPath, out byte driveIndex))
                     {
                         string cacheKey = GetCustomFolderCacheKey(folder.FolderPath);
-                        tasks.Add(Task.Run(() => RescanCustomFolder(
-                            folder.FolderPath, cacheKey, driveIndex,
-                            _currentSettings.ExcludePatterns, _cts.Token)));
+                        tasks.Add(Task.Run(() =>
+                            NetworkDriveDetector.RunImpersonated(() =>
+                                RescanCustomFolder(
+                                    folder.FolderPath, cacheKey, driveIndex,
+                                    _currentSettings.ExcludePatterns, _cts.Token))));
                     }
                 }
             }
@@ -697,8 +713,9 @@ namespace TNDexplorer.Core
                 RaiseProgress($"{folderPath} を更新中...", _index.TotalCount, IndexingState.Indexing);
                 try
                 {
-                    RescanCustomFolder(folderPath, cacheKey, driveIndex,
-                        _currentSettings.ExcludePatterns, _cts.Token);
+                    NetworkDriveDetector.RunImpersonated(() =>
+                        RescanCustomFolder(folderPath, cacheKey, driveIndex,
+                            _currentSettings.ExcludePatterns, _cts.Token));
                 }
                 catch (Exception ex)
                 {
@@ -850,6 +867,10 @@ namespace TNDexplorer.Core
                 _mftReaders.Clear();
 
                 _cts?.Dispose();
+
+                // Release the cached user impersonation token
+                NetworkDriveDetector.ReleaseUserToken();
+
                 _disposed = true;
             }
         }

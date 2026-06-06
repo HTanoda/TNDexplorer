@@ -44,6 +44,13 @@ namespace TNDexplorer.Core
         private readonly Dictionary<string, byte> _networkDriveIndexMap = new Dictionary<string, byte>();
         // Track custom folder assignments for rescan
         private readonly Dictionary<string, byte> _customFolderIndexMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        // 変更監視用: ドライブごとの watchRoot（相対パス算出の起点）。
+        // ネットワークドライブは "K:\\"、カスタムフォルダは実体パス(UNC等)。
+        private readonly Dictionary<byte, string> _watchRootByDrive = new Dictionary<byte, string>();
+        // 変更監視用: ドライブごとの擬似FRN採番カウンタ（遅延シード）。
+        private readonly Dictionary<byte, ulong> _networkFrnCounter = new Dictionary<byte, ulong>();
+        private readonly object _frnCounterLock = new object();
+        private NetworkChangeMonitor _changeMonitor;
         private AppSettings _currentSettings;
         private Timer _rescanTimer;
         private DateTime? _nextDailyRescanTime;
@@ -100,6 +107,7 @@ namespace TNDexplorer.Core
                     string rootPath = drive.DriveLetter + "\\";
                     _index.SetDriveLetter(driveIndex, drive.DriveLetter);
                     _networkDriveIndexMap[drive.DriveLetter] = driveIndex;
+                    _watchRootByDrive[driveIndex] = rootPath; // "K:\\"
 
                     networkTasks.Add(Task.Run(() =>
                         NetworkDriveDetector.RunImpersonated(() =>
@@ -133,6 +141,7 @@ namespace TNDexplorer.Core
                         string pseudoDrive = actualPath;
                         _index.SetDriveLetter(driveIndex, pseudoDrive);
                         _customFolderIndexMap[folder.FolderPath] = driveIndex;
+                        _watchRootByDrive[driveIndex] = actualPath;
 
                         string rootPath = actualPath;
                         customFolderTasks.Add(Task.Run(() =>
@@ -612,6 +621,27 @@ namespace TNDexplorer.Core
             // Sanitize path for use as filename: replace \ / : with _
             string safe = folderPath.Replace("\\", "_").Replace("/", "_").Replace(":", "_");
             return "CF_" + safe;
+        }
+
+        /// <summary>
+        /// 指定ネットワークドライブ用に、既存FRNと衝突しない擬似FRNを採番する。
+        /// 初回呼び出し時に現在の最大FRNからシードする。
+        /// </summary>
+        private ulong AllocateNetworkFrn(byte driveIndex)
+        {
+            lock (_frnCounterLock)
+            {
+                if (!_networkFrnCounter.TryGetValue(driveIndex, out ulong current))
+                {
+                    ulong max = 0;
+                    foreach (var e in _index.GetEntriesForDrive(driveIndex))
+                        if (e.FileReferenceNumber > max) max = e.FileReferenceNumber;
+                    current = max;
+                }
+                current++;
+                _networkFrnCounter[driveIndex] = current;
+                return current;
+            }
         }
 
         private void OnRescanTimerTick(object state)

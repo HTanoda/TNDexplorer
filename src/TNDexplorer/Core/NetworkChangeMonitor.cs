@@ -38,6 +38,9 @@ namespace TNDexplorer.Core
 
         private Timer _flushTimer;
         private int _flushing; // 0/1 リエントランシガード
+        private readonly object _errorRecreateLock = new object();
+        private readonly Dictionary<byte, int> _errorRecreateCounts = new Dictionary<byte, int>();
+        private const int MaxWatcherRecreates = 5;
         private bool _disposed;
 
         public NetworkChangeMonitor(
@@ -94,7 +97,7 @@ namespace TNDexplorer.Core
                     OnChanged(di, e.FullPath);
                     OnChanged(di, e.OldFullPath);
                 };
-                w.Error += (s, e) => OnError(di, t, e);
+                w.Error += (s, e) => OnError(di, t, w, e);
 
                 // ハンドルを開く（インピーソネーション下）
                 w.EnableRaisingEvents = true;
@@ -120,21 +123,41 @@ namespace TNDexplorer.Core
             }
         }
 
-        private void OnError(byte driveIndex, NetworkChangeTarget t, ErrorEventArgs e)
+        private void OnError(byte driveIndex, NetworkChangeTarget t, FileSystemWatcher faulting, ErrorEventArgs e)
         {
             Debug.WriteLine($"NetworkChangeMonitor: Error drive={driveIndex}: {e.GetException()?.Message}");
             // 取りこぼし（バッファ溢れ等）→ その対象をフルスキャンで回収
             try { _requestFullRescan(driveIndex); } catch { }
 
-            // Watcher を作り直す
-            try
+            // 故障したWatcherを除去・破棄（再作成で多重化させない）
+            if (faulting != null)
             {
-                _impersonate(() =>
+                lock (_watchers)
                 {
-                    try { CreateWatcher(t); } catch { }
-                });
+                    try { faulting.EnableRaisingEvents = false; faulting.Dispose(); } catch { }
+                    _watchers.Remove(faulting);
+                }
             }
-            catch { }
+
+            if (_disposed) return;
+
+            // 連続エラーが上限を超えたら再作成を諦め、定期スキャンに委ねる（ファイルサーバ負荷の暴走防止）
+            int count;
+            lock (_errorRecreateLock)
+            {
+                _errorRecreateCounts.TryGetValue(driveIndex, out count);
+                count++;
+                _errorRecreateCounts[driveIndex] = count;
+            }
+            if (count > MaxWatcherRecreates)
+            {
+                Debug.WriteLine($"NetworkChangeMonitor: drive={driveIndex} のWatcher再作成が上限({MaxWatcherRecreates})到達。監視を停止し定期スキャンに委ねる。");
+                return;
+            }
+
+            // CreateWatcher は内部で impersonate するため二重ラップしない
+            try { CreateWatcher(t); }
+            catch (Exception ex) { Debug.WriteLine($"NetworkChangeMonitor: Watcher再作成失敗 drive={driveIndex}: {ex.Message}"); }
         }
 
         private void OnFlush(object state)

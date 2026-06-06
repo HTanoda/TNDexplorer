@@ -50,6 +50,10 @@ namespace TNDexplorer.Core
         // 変更監視用: ドライブごとの擬似FRN採番カウンタ（遅延シード）。
         private readonly Dictionary<byte, ulong> _networkFrnCounter = new Dictionary<byte, ulong>();
         private readonly object _frnCounterLock = new object();
+        // フルスキャン実行中のドライブ集合。実行中はそのドライブのリコンサイルをスキップして
+        // スナップショット不整合による一時的な重複/孤児エントリを防ぐ。
+        private readonly HashSet<byte> _rescanInProgress = new HashSet<byte>();
+        private readonly object _rescanGuardLock = new object();
         private NetworkChangeMonitor _changeMonitor;
         private AppSettings _currentSettings;
         private Timer _rescanTimer;
@@ -205,6 +209,7 @@ namespace TNDexplorer.Core
         {
             if (_cts == null || _cts.IsCancellationRequested) return;
             if (!_watchRootByDrive.TryGetValue(driveIndex, out string watchRoot)) return;
+            lock (_rescanGuardLock) { if (_rescanInProgress.Contains(driveIndex)) return; }
 
             var excludePatterns = _currentSettings?.ExcludePatterns;
             var scanner = new NetworkDriveScanner();
@@ -529,6 +534,7 @@ namespace TNDexplorer.Core
         private void RescanNetworkDrive(string rootPath, string driveLetter,
             byte driveIndex, IReadOnlyList<string> excludePatterns, CancellationToken ct)
         {
+            lock (_rescanGuardLock) { _rescanInProgress.Add(driveIndex); }
             var scanner = new NetworkDriveScanner();
 
             try
@@ -538,6 +544,7 @@ namespace TNDexplorer.Core
                 // Replace index entries for this drive
                 _index.RemoveEntriesForDrive(driveIndex);
                 _index.AddEntries(driveIndex, entries);
+                ResetNetworkFrnCounter(driveIndex);
 
                 // Update cache (with retry for transient IO errors)
                 SaveCacheWithRetry(driveLetter, entries);
@@ -550,6 +557,10 @@ namespace TNDexplorer.Core
             catch (Exception ex)
             {
                 Debug.WriteLine($"Network rescan failed for {rootPath}: {ex}");
+            }
+            finally
+            {
+                lock (_rescanGuardLock) { _rescanInProgress.Remove(driveIndex); }
             }
         }
 
@@ -658,6 +669,7 @@ namespace TNDexplorer.Core
         private void RescanCustomFolder(string rootPath, string cacheKey, byte driveIndex,
             IReadOnlyList<string> excludePatterns, CancellationToken ct)
         {
+            lock (_rescanGuardLock) { _rescanInProgress.Add(driveIndex); }
             var scanner = new NetworkDriveScanner();
 
             try
@@ -667,6 +679,7 @@ namespace TNDexplorer.Core
 
                 _index.RemoveEntriesForDrive(driveIndex);
                 _index.AddEntries(driveIndex, entries);
+                ResetNetworkFrnCounter(driveIndex);
 
                 SaveCacheWithRetry(cacheKey, entries);
 
@@ -678,6 +691,10 @@ namespace TNDexplorer.Core
             catch (Exception ex)
             {
                 Debug.WriteLine($"Custom folder rescan failed for {rootPath}: {ex}");
+            }
+            finally
+            {
+                lock (_rescanGuardLock) { _rescanInProgress.Remove(driveIndex); }
             }
         }
 
@@ -714,6 +731,8 @@ namespace TNDexplorer.Core
         /// <summary>
         /// 指定ネットワークドライブ用に、既存FRNと衝突しない擬似FRNを採番する。
         /// 初回呼び出し時に現在の最大FRNからシードする。
+        /// 不変条件: カウンタは単調増加。フルスキャンでエントリを 1..M に入れ替えた際は
+        /// ResetNetworkFrnCounter で破棄し、次回採番時に新しい最大値から再シードする。
         /// </summary>
         private ulong AllocateNetworkFrn(byte driveIndex)
         {
@@ -729,6 +748,17 @@ namespace TNDexplorer.Core
                 current++;
                 _networkFrnCounter[driveIndex] = current;
                 return current;
+            }
+        }
+
+        /// <summary>
+        /// フルスキャンでドライブのエントリを総入れ替えした後に呼ぶ。次回採番時に再シードさせる。
+        /// </summary>
+        private void ResetNetworkFrnCounter(byte driveIndex)
+        {
+            lock (_frnCounterLock)
+            {
+                _networkFrnCounter.Remove(driveIndex);
             }
         }
 

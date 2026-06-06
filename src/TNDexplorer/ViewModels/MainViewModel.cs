@@ -82,6 +82,7 @@ namespace TNDexplorer.ViewModels
 
         private DispatcherTimer _debounceTimer;
         private DispatcherTimer _favStatusTimer;
+        private DispatcherTimer _autoRefreshTimer;
 
         public string SearchText
         {
@@ -157,6 +158,11 @@ namespace TNDexplorer.ViewModels
                 }
             }
         }
+
+        /// <summary>結果一覧の縦スクロール位置を取得する（ビューが設定。ライブ更新時の位置保持用）。</summary>
+        public Func<double> GetResultsScrollOffset { get; set; }
+        /// <summary>結果一覧の縦スクロール位置を復元する（ビューが設定。ライブ更新時の位置保持用）。</summary>
+        public Action<double> SetResultsScrollOffset { get; set; }
 
         public bool FilterAll
         {
@@ -404,6 +410,19 @@ namespace TNDexplorer.ViewModels
                 _ = ExecuteSearchAsync();
             };
 
+            _autoRefreshTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(800)
+            };
+            _autoRefreshTimer.Tick += (s, e) =>
+            {
+                _autoRefreshTimer.Stop();
+                // 内容検索は自動更新しない。アクティブなクエリがあるときだけ再検索。
+                if (_isContentSearch) return;
+                if (string.IsNullOrWhiteSpace(_searchText) && !HasAdvancedFilters()) return;
+                _ = ExecuteSearchAsync(preserveView: true);
+            };
+
             _favStatusTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(2)
@@ -588,7 +607,7 @@ namespace TNDexplorer.ViewModels
                 || !string.IsNullOrWhiteSpace(_folderPath) || !string.IsNullOrWhiteSpace(_extensionFilter);
         }
 
-        private async Task ExecuteSearchAsync()
+        private async Task ExecuteSearchAsync(bool preserveView = false)
         {
             string query = _searchText;
 
@@ -763,9 +782,41 @@ namespace TNDexplorer.ViewModels
                         MarkFiscalYearBoundaries(results);
                     }
 
+                    // ライブ更新時は選択行(FullPath)と縦スクロール位置を退避して復元する
+                    string preservedSelection = null;
+                    double preservedOffset = 0;
+                    if (preserveView)
+                    {
+                        _dispatcher.Invoke(() =>
+                        {
+                            preservedSelection = SelectedResult?.FullPath;
+                            preservedOffset = GetResultsScrollOffset?.Invoke() ?? 0;
+                        });
+                    }
+
+                    var finalResults = results;
                     _dispatcher.Invoke(() =>
                     {
-                        Results = results;
+                        Results = finalResults;
+
+                        if (preserveView)
+                        {
+                            if (!string.IsNullOrEmpty(preservedSelection))
+                            {
+                                FileResultItem match = null;
+                                for (int i = 0; i < finalResults.Count; i++)
+                                {
+                                    if (string.Equals(finalResults[i].FullPath, preservedSelection, StringComparison.OrdinalIgnoreCase))
+                                    { match = finalResults[i]; break; }
+                                }
+                                if (match != null) SelectedResult = match;
+                            }
+                            // レイアウト確定後にスクロール位置を復元
+                            _dispatcher.BeginInvoke(
+                                new Action(() => SetResultsScrollOffset?.Invoke(preservedOffset)),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+
                         UpdateStatusText();
                     });
                 }
@@ -782,6 +833,12 @@ namespace TNDexplorer.ViewModels
 
                 IsIndexing = e.State == IndexingState.Indexing;
                 UpdateStatusText();
+                // インデックス変更を表示中の検索結果へライブ反映（内容検索とアイドル時は除外）
+                if (!_isContentSearch && (!string.IsNullOrWhiteSpace(_searchText) || HasAdvancedFilters()))
+                {
+                    _autoRefreshTimer.Stop();
+                    _autoRefreshTimer.Start();
+                }
             }));
         }
 

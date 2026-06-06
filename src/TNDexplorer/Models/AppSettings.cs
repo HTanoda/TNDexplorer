@@ -33,6 +33,7 @@ namespace TNDexplorer.Models
             WindowTop = -1;
             FullTextMaxFileSizeMB = 50;
             RescanMode = RescanMode.Daily;
+            NetworkChangeMonitorEnabled = false;
             DailyRescanHour = 12;
             DailyRescanMinute = 0;
         }
@@ -86,6 +87,13 @@ namespace TNDexplorer.Models
 
         [DataMember]
         public string LastRescanTimestamp { get; set; }
+
+        /// <summary>
+        /// ネットワークドライブ／カスタムフォルダの変更をFileSystemWatcherでリアルタイム監視するか。
+        /// 既定false（オプトイン）。多人数環境ではファイルサーバーへの常時変更通知購読が発生するため注意。
+        /// </summary>
+        [DataMember]
+        public bool NetworkChangeMonitorEnabled { get; set; } = false;
 
         [DataMember]
         public bool ExcludeHiddenFiles { get; set; } = true;

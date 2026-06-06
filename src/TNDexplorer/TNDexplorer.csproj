@@ -106,6 +106,7 @@
     <Compile Include="Core\UsnJournalMonitor.cs" />
     <Compile Include="Core\NetworkDriveDetector.cs" />
     <Compile Include="Core\NetworkDriveScanner.cs" />
+    <Compile Include="Core\NetworkIndexReconciler.cs" />
     <Compile Include="Core\SearchEngine.cs" />
     <Compile Include="Core\SearchQueryParser.cs" />
     <Compile Include="Core\PreviewHandlerHost.cs" />

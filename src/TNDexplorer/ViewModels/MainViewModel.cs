@@ -83,6 +83,8 @@ namespace TNDexplorer.ViewModels
         private DispatcherTimer _debounceTimer;
         private DispatcherTimer _favStatusTimer;
         private DispatcherTimer _autoRefreshTimer;
+        // ライブ更新の再描画中はプレビュー再ロードを抑止する（同一ファイル再選択によるちらつき防止）
+        private bool _suppressPreviewUpdate;
 
         public string SearchText
         {
@@ -145,6 +147,9 @@ namespace TNDexplorer.ViewModels
             {
                 if (SetProperty(ref _selectedResult, value))
                 {
+                    // ライブ更新の再描画中はプレビューを触らない（同一ファイルの再ロード/ちらつき防止）
+                    if (_suppressPreviewUpdate) return;
+
                     if (_isPreviewVisible && value != null && !value.IsDirectory)
                     {
                         PreviewFileName = value.Name;
@@ -797,27 +802,35 @@ namespace TNDexplorer.ViewModels
                     var finalResults = results;
                     _dispatcher.Invoke(() =>
                     {
-                        Results = finalResults;
-
-                        if (preserveView)
+                        if (preserveView) _suppressPreviewUpdate = true;
+                        try
                         {
-                            if (!string.IsNullOrEmpty(preservedSelection))
-                            {
-                                FileResultItem match = null;
-                                for (int i = 0; i < finalResults.Count; i++)
-                                {
-                                    if (string.Equals(finalResults[i].FullPath, preservedSelection, StringComparison.OrdinalIgnoreCase))
-                                    { match = finalResults[i]; break; }
-                                }
-                                if (match != null) SelectedResult = match;
-                            }
-                            // レイアウト確定後にスクロール位置を復元
-                            _dispatcher.BeginInvoke(
-                                new Action(() => SetResultsScrollOffset?.Invoke(preservedOffset)),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
+                            Results = finalResults;
 
-                        UpdateStatusText();
+                            if (preserveView)
+                            {
+                                if (!string.IsNullOrEmpty(preservedSelection))
+                                {
+                                    FileResultItem match = null;
+                                    for (int i = 0; i < finalResults.Count; i++)
+                                    {
+                                        if (string.Equals(finalResults[i].FullPath, preservedSelection, StringComparison.OrdinalIgnoreCase))
+                                        { match = finalResults[i]; break; }
+                                    }
+                                    if (match != null) SelectedResult = match;
+                                }
+                                // レイアウト確定後にスクロール位置を復元
+                                _dispatcher.BeginInvoke(
+                                    new Action(() => SetResultsScrollOffset?.Invoke(preservedOffset)),
+                                    System.Windows.Threading.DispatcherPriority.Background);
+                            }
+
+                            UpdateStatusText();
+                        }
+                        finally
+                        {
+                            if (preserveView) _suppressPreviewUpdate = false;
+                        }
                     });
                 }
             }
@@ -968,6 +981,7 @@ namespace TNDexplorer.ViewModels
                 _searchCts?.Cancel();
                 _searchCts?.Dispose();
                 _debounceTimer?.Stop();
+                _autoRefreshTimer?.Stop();
                 _favStatusTimer?.Stop();
                 _disposed = true;
             }

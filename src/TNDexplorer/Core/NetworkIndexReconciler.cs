@@ -142,13 +142,17 @@ namespace TNDexplorer.Core
 
             string name = NameOf(dirFullPath);
 
-            // 既存インデックスの親の子に dir があれば再利用
+            // 既存インデックスの親の子に同名があれば確認
             if (_childrenByParent.TryGetValue(parentFrn.Value, out var siblings)
-                && siblings.TryGetValue(name, out var existing)
-                && existing.IsDirectory)
+                && siblings.TryGetValue(name, out var existing))
             {
-                _dirFrnCache[rel] = existing.FileReferenceNumber;
-                return existing.FileReferenceNumber;
+                if (existing.IsDirectory)
+                {
+                    _dirFrnCache[rel] = existing.FileReferenceNumber;
+                    return existing.FileReferenceNumber;
+                }
+                // 同名だがファイル → 種別変更。旧ファイルエントリを除去し、下でフォルダとして作り直す。
+                RemoveLeaf(existing);
             }
 
             // インデックスに無い → FS上に実在するか親を列挙して確認し、あれば作成
@@ -183,20 +187,30 @@ namespace TNDexplorer.Core
 
                 if (existing != null)
                 {
-                    if (!fc.IsDirectory && !existing.IsDirectory)
+                    if (existing.IsDirectory != fc.IsDirectory)
                     {
-                        // ファイル更新: サイズ/更新日時が変わっていれば反映（インプレース）
-                        if (existing.Size != fc.Size || existing.ModifiedDate != fc.Modified)
-                        {
-                            existing.Size = fc.Size;
-                            existing.ModifiedDate = fc.Modified;
-                        }
+                        // 同名で種別が変わった（ファイル⇔フォルダ。エディタのアトミックリネーム等）:
+                        // 旧エントリを削除して新規追加する。
+                        if (existing.IsDirectory) RemoveSubtree(existing.FileReferenceNumber);
+                        else RemoveLeaf(existing);
+
+                        AddEntry(dirFrn, fc);
+                        if (fc.IsDirectory)
+                            queue.Enqueue(Path.Combine(dirFullPath, fc.Name));
                     }
-                    // ディレクトリの中身は、そのフォルダがdirtyなら別途処理される
+                    else if (!fc.IsDirectory)
+                    {
+                        // ファイル更新: サイズ/更新日時が変わっていれば反映。
+                        // 並行検索がこのFileEntryのフィールドをロックなしで読むため、インプレース変更は
+                        // x86でDateTime/longのtorn readハザードになる。参照差し替え(UpdateEntry)で回避する。
+                        if (existing.Size != fc.Size || existing.ModifiedDate != fc.Modified)
+                            UpdateFile(dirFrn, existing, fc);
+                    }
+                    // フォルダ（種別一致）の中身は、そのフォルダがdirtyなら別途処理される
                 }
                 else
                 {
-                    ulong newFrn = AddEntry(dirFrn, fc);
+                    AddEntry(dirFrn, fc);
                     if (fc.IsDirectory)
                     {
                         // 新規サブフォルダ → 中身を拾うためキューに追加（再帰的に展開される）
@@ -246,6 +260,26 @@ namespace TNDexplorer.Core
                 _childrenByParent[frn] = new Dictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
 
             return frn;
+        }
+
+        private void UpdateFile(ulong parentFrn, FileEntry existing, FsChild fc)
+        {
+            // 既存FRN/親/名前/フラグは保持し、サイズと更新日時だけ更新した新インスタンスに差し替える。
+            var updated = new FileEntry
+            {
+                FileReferenceNumber = existing.FileReferenceNumber,
+                ParentFileReferenceNumber = existing.ParentFileReferenceNumber,
+                Name = existing.Name,
+                Size = fc.Size,
+                ModifiedDate = fc.Modified,
+                Flags = existing.Flags,
+                DriveIndex = _driveIndex,
+            };
+
+            _index.UpdateEntry(_driveIndex, existing.FileReferenceNumber, updated);
+            _byFrn[existing.FileReferenceNumber] = updated;
+            if (_childrenByParent.TryGetValue(parentFrn, out var dict))
+                dict[existing.Name] = updated;
         }
 
         private void RemoveLeaf(FileEntry e)

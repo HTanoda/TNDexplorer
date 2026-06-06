@@ -59,6 +59,17 @@ namespace TNDexplorer.Views
                 vm.PreviewVisibilityChanged += OnPreviewVisibilityChanged;
                 vm.FileOpening += OnFileOpening;
 
+                vm.GetResultsScrollOffset = () =>
+                {
+                    var sv = FindVisualChild<System.Windows.Controls.ScrollViewer>(ResultsListView);
+                    return sv?.VerticalOffset ?? 0;
+                };
+                vm.SetResultsScrollOffset = offset =>
+                {
+                    var sv = FindVisualChild<System.Windows.Controls.ScrollViewer>(ResultsListView);
+                    sv?.ScrollToVerticalOffset(offset);
+                };
+
                 // Restore saved column order
                 RestoreColumnOrder(vm);
             }
@@ -921,6 +932,20 @@ namespace TNDexplorer.Views
 
             _lastHeaderClicked = headerClicked;
             _lastDirection = direction;
+        }
+
+        private static T FindVisualChild<T>(System.Windows.DependencyObject parent) where T : System.Windows.DependencyObject
+        {
+            if (parent == null) return null;
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T typed) return typed;
+                var result = FindVisualChild<T>(child);
+                if (result != null) return result;
+            }
+            return null;
         }
 
         /// <summary>

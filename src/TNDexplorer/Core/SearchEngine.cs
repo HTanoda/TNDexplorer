@@ -138,6 +138,12 @@ namespace TNDexplorer.Core
                         });
                     }
 
+                    // 並列検索＋ConcurrentBag により結果順序は非決定的。決定的な全順序(FullPath)を
+                    // 与えることで、同一データなら毎回同一の並びになり、ライブ更新時に同一更新日時の
+                    // 行が入れ替わって見える問題を防ぐ（列ソートの同値も安定する）。
+                    results.Sort((a, b) =>
+                        string.Compare(a.FullPath, b.FullPath, StringComparison.OrdinalIgnoreCase));
+
                     return results;
                 }, newCts.Token).ConfigureAwait(false);
             }

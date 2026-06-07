@@ -22,7 +22,7 @@
                    RenderOptions.BitmapScalingMode="HighQuality"/>
             <StackPanel VerticalAlignment="Center">
                 <TextBlock Text="TNDexplorer" FontSize="22" FontWeight="Bold"/>
-                <TextBlock Text="バージョン 1.1.5.0" FontSize="13" Foreground="#FF666666"/>
+                <TextBlock Text="バージョン 1.2.0.0" FontSize="13" Foreground="#FF666666"/>
             </StackPanel>
         </StackPanel>
 

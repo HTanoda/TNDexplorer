@@ -35,7 +35,7 @@ namespace TNDexplorer.Models
             RescanMode = RescanMode.Daily;
             NetworkChangeMonitorEnabled = false;
             DailyRescanHour = 12;
-            DailyRescanMinute = 0;
+            DailyRescanMinute = 30;
         }
 
         [OnDeserialized]
@@ -83,7 +83,7 @@ namespace TNDexplorer.Models
         public int DailyRescanHour { get; set; } = 12;
 
         [DataMember]
-        public int DailyRescanMinute { get; set; } = 0;
+        public int DailyRescanMinute { get; set; } = 30;
 
         [DataMember]
         public string LastRescanTimestamp { get; set; }

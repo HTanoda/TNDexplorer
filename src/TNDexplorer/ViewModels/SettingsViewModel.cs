@@ -565,7 +565,8 @@ namespace TNDexplorer.ViewModels
             {
                 _settings.NetworkRescanIntervalMinutes = 180;
             }
-            _settings.NetworkChangeMonitorEnabled = NetworkChangeMonitorEnabled;
+            // リアルタイム監視は高度な設定が有効なときだけ保存（多人数環境のサーバ負荷に配慮）
+            _settings.NetworkChangeMonitorEnabled = IsAdvancedEnabled && NetworkChangeMonitorEnabled;
 
             // Save content search settings
             _settings.FullTextMaxFileSizeMB = FullTextMaxFileSizeMB;
@@ -594,6 +595,8 @@ namespace TNDexplorer.ViewModels
             }
             // Turn off hidden/system file scanning
             IncludeHiddenSystemFiles = false;
+            // Turn off network real-time monitoring (advanced-only option)
+            NetworkChangeMonitorEnabled = false;
         }
 
         public AppSettings GetCurrentSettings()

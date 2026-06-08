@@ -138,6 +138,14 @@
                                   Margin="5,0,0,10"
                                   ToolTip="ONにすると、隠し属性やシステム属性のファイル・フォルダもインデックスに含めます。スキャン時間が大幅に長くなる可能性があります。"/>
 
+                        <!-- Advanced: Network change monitor (grayed out when advanced is OFF) -->
+                        <CheckBox Content="ネットワークの変更をリアルタイム監視する（実験的）"
+                                  IsChecked="{Binding NetworkChangeMonitorEnabled}"
+                                  IsEnabled="{Binding IsAdvancedEnabled}"
+                                  Margin="5,0,0,4"/>
+                        <TextBlock Text="ファイルサーバーへ常時の変更通知購読を行います。変更はアプリの再起動後に反映されます。"
+                                   TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="20,2,0,10"/>
+
                         <!-- Advanced settings toggle button -->
                         <Button Content="{Binding AdvancedToggleButtonText}"
                                 Padding="12,4" FontSize="12"
@@ -157,13 +165,6 @@
                                     Background="#FF0078D4" Foreground="White" BorderThickness="0"
                                     Cursor="Hand" ToolTip="すべてのフォルダを更新"/>
                         </StackPanel>
-
-                        <!-- Network change monitor -->
-                        <CheckBox Content="ネットワークの変更をリアルタイム監視する（実験的）"
-                                  IsChecked="{Binding NetworkChangeMonitorEnabled}"
-                                  Margin="5,0,0,4"/>
-                        <TextBlock Text="ファイルサーバーへ常時の変更通知購読を行います。多人数環境では管理者にご確認ください。変更は再起動後に反映されます。"
-                                   TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="20,2,0,10"/>
 
                         <!-- Exclude Patterns -->
                         <TextBlock Text="除外フォルダ (1行に1つ):"

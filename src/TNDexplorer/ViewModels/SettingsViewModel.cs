@@ -59,6 +59,7 @@ namespace TNDexplorer.ViewModels
         private int _rescanModeIndex;
         private int _dailyRescanHour;
         private int _dailyRescanMinute;
+        private bool _networkChangeMonitorEnabled;
 
         // Advanced settings
         private bool _isAdvancedEnabled;
@@ -188,6 +189,12 @@ namespace TNDexplorer.ViewModels
             set => SetProperty(ref _dailyRescanMinute, value);
         }
 
+        public bool NetworkChangeMonitorEnabled
+        {
+            get => _networkChangeMonitorEnabled;
+            set => SetProperty(ref _networkChangeMonitorEnabled, value);
+        }
+
         /// <summary>
         /// Whether advanced settings (Interval mode, hidden/system file scan) are enabled.
         /// Controls UI enable/disable state of advanced options.
@@ -285,6 +292,7 @@ namespace TNDexplorer.ViewModels
             RescanModeIndex = (int)_settings.RescanMode;
             DailyRescanHour = _settings.DailyRescanHour;
             DailyRescanMinute = _settings.DailyRescanMinute;
+            NetworkChangeMonitorEnabled = _settings.NetworkChangeMonitorEnabled;
 
             // Advanced settings
             _isAdvancedEnabled = _settings.AdvancedSettingsEnabled;
@@ -557,6 +565,8 @@ namespace TNDexplorer.ViewModels
             {
                 _settings.NetworkRescanIntervalMinutes = 180;
             }
+            // リアルタイム監視は高度な設定が有効なときだけ保存（多人数環境のサーバ負荷に配慮）
+            _settings.NetworkChangeMonitorEnabled = IsAdvancedEnabled && NetworkChangeMonitorEnabled;
 
             // Save content search settings
             _settings.FullTextMaxFileSizeMB = FullTextMaxFileSizeMB;
@@ -585,6 +595,8 @@ namespace TNDexplorer.ViewModels
             }
             // Turn off hidden/system file scanning
             IncludeHiddenSystemFiles = false;
+            // Turn off network real-time monitoring (advanced-only option)
+            NetworkChangeMonitorEnabled = false;
         }
 
         public AppSettings GetCurrentSettings()

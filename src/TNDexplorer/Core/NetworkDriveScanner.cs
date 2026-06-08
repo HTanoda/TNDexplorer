@@ -142,6 +142,66 @@ namespace TNDexplorer.Core
             return false;
         }
 
+        /// <summary>
+        /// 指定フォルダの直下の子（ディレクトリ＋ファイル）だけを非再帰で列挙する。
+        /// フォルダ自体が存在しない／アクセス不能の場合は null を返す（削除検出に使用）。
+        /// 呼び出し側はインピーソネーション下で呼ぶこと。
+        /// </summary>
+        public List<FsChild> ListDirectoryChildren(string path, IReadOnlyList<string> excludePatterns)
+        {
+            if (!Directory.Exists(path))
+                return null;
+
+            var result = new List<FsChild>();
+            try
+            {
+                foreach (var dir in Directory.EnumerateDirectories(path))
+                {
+                    string name = Path.GetFileName(dir);
+                    if (ShouldExclude(name, excludePatterns)) continue;
+
+                    DateTime modified = default(DateTime);
+                    try { modified = new DirectoryInfo(dir).LastWriteTime; } catch { }
+
+                    result.Add(new FsChild
+                    {
+                        Name = name,
+                        IsDirectory = true,
+                        Size = 0,
+                        Modified = modified,
+                    });
+                }
+
+                foreach (var file in Directory.EnumerateFiles(path))
+                {
+                    string name = Path.GetFileName(file);
+
+                    long size = 0;
+                    DateTime modified = default(DateTime);
+                    try
+                    {
+                        var fi = new FileInfo(file);
+                        size = fi.Length;
+                        modified = fi.LastWriteTime;
+                    }
+                    catch { }
+
+                    result.Add(new FsChild
+                    {
+                        Name = name,
+                        IsDirectory = false,
+                        Size = size,
+                        Modified = modified,
+                    });
+                }
+            }
+            catch (UnauthorizedAccessException) { return null; }
+            catch (DirectoryNotFoundException) { return null; }
+            catch (IOException) { return null; }
+
+            return result;
+        }
+
         public async Task<List<FileEntry>> ScanDriveAsync(
             string rootPath,
             byte driveIndex,

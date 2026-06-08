@@ -44,6 +44,17 @@ namespace TNDexplorer.Core
         private readonly Dictionary<string, byte> _networkDriveIndexMap = new Dictionary<string, byte>();
         // Track custom folder assignments for rescan
         private readonly Dictionary<string, byte> _customFolderIndexMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        // 変更監視用: ドライブごとの watchRoot（相対パス算出の起点）。
+        // ネットワークドライブは "K:\\"、カスタムフォルダは実体パス(UNC等)。
+        private readonly Dictionary<byte, string> _watchRootByDrive = new Dictionary<byte, string>();
+        // 変更監視用: ドライブごとの擬似FRN採番カウンタ（遅延シード）。
+        private readonly Dictionary<byte, ulong> _networkFrnCounter = new Dictionary<byte, ulong>();
+        private readonly object _frnCounterLock = new object();
+        // フルスキャン実行中のドライブ集合。実行中はそのドライブのリコンサイルをスキップして
+        // スナップショット不整合による一時的な重複/孤児エントリを防ぐ。
+        private readonly HashSet<byte> _rescanInProgress = new HashSet<byte>();
+        private readonly object _rescanGuardLock = new object();
+        private NetworkChangeMonitor _changeMonitor;
         private AppSettings _currentSettings;
         private Timer _rescanTimer;
         private DateTime? _nextDailyRescanTime;
@@ -100,6 +111,7 @@ namespace TNDexplorer.Core
                     string rootPath = drive.DriveLetter + "\\";
                     _index.SetDriveLetter(driveIndex, drive.DriveLetter);
                     _networkDriveIndexMap[drive.DriveLetter] = driveIndex;
+                    _watchRootByDrive[driveIndex] = rootPath; // "K:\\"
 
                     networkTasks.Add(Task.Run(() =>
                         NetworkDriveDetector.RunImpersonated(() =>
@@ -133,6 +145,7 @@ namespace TNDexplorer.Core
                         string pseudoDrive = actualPath;
                         _index.SetDriveLetter(driveIndex, pseudoDrive);
                         _customFolderIndexMap[folder.FolderPath] = driveIndex;
+                        _watchRootByDrive[driveIndex] = actualPath;
 
                         string rootPath = actualPath;
                         customFolderTasks.Add(Task.Run(() =>
@@ -155,6 +168,9 @@ namespace TNDexplorer.Core
                 // Start rescan scheduler (Daily / Interval / Manual)
                 StartRescanScheduler(settings);
 
+                // Start network change monitoring (opt-in)
+                StartChangeMonitor(settings);
+
                 // Initialize TextExtractor for content search (grep-style)
                 InitializeTextExtractor(settings);
             }
@@ -162,6 +178,92 @@ namespace TNDexplorer.Core
             {
                 State = IndexingState.Error;
                 RaiseProgress($"エラー: {ex.Message}", _index.TotalCount, IndexingState.Error);
+            }
+        }
+
+        /// <summary>
+        /// 設定が有効な場合のみ、有効な全ネットワーク対象（ドライブ＋カスタムフォルダ）の変更監視を開始する。
+        /// </summary>
+        private void StartChangeMonitor(AppSettings settings)
+        {
+            if (!settings.NetworkChangeMonitorEnabled) return;
+
+            var targets = new List<NetworkChangeTarget>();
+            foreach (var kvp in _watchRootByDrive)
+                targets.Add(new NetworkChangeTarget { DriveIndex = kvp.Key, WatchRootPath = kvp.Value });
+
+            if (targets.Count == 0) return;
+
+            _changeMonitor = new NetworkChangeMonitor(
+                targets,
+                ReconcileDirectories,
+                RequestFullRescanForDrive,
+                NetworkDriveDetector.RunImpersonated);
+            _changeMonitor.Start();
+        }
+
+        /// <summary>
+        /// 変更があったフォルダ群を、そのドライブのインデックスへ差分反映する（インピーソネーション下）。
+        /// </summary>
+        private void ReconcileDirectories(byte driveIndex, IReadOnlyCollection<string> dirFullPaths)
+        {
+            if (_cts == null || _cts.IsCancellationRequested) return;
+            if (!_watchRootByDrive.TryGetValue(driveIndex, out string watchRoot)) return;
+            lock (_rescanGuardLock) { if (_rescanInProgress.Contains(driveIndex)) return; }
+
+            var excludePatterns = _currentSettings?.ExcludePatterns;
+            var scanner = new NetworkDriveScanner();
+
+            NetworkDriveDetector.RunImpersonated(() =>
+            {
+                var reconciler = new NetworkIndexReconciler(
+                    _index,
+                    driveIndex,
+                    watchRoot,
+                    path => scanner.ListDirectoryChildren(path, excludePatterns),
+                    () => AllocateNetworkFrn(driveIndex));
+                reconciler.ReconcileBatch(dirFullPaths);
+            });
+
+            RaiseProgress(null, _index.TotalCount, IndexingState.Ready);
+        }
+
+        /// <summary>
+        /// 監視の取りこぼし時に、対象ドライブ（ネットワークドライブ or カスタムフォルダ）をフルスキャンで回収する。
+        /// </summary>
+        private void RequestFullRescanForDrive(byte driveIndex)
+        {
+            if (_cts == null || _cts.IsCancellationRequested) return;
+            if (_currentSettings == null) return;
+
+            // ネットワークドライブ？
+            foreach (var drive in _currentSettings.NetworkDrives)
+            {
+                if (_networkDriveIndexMap.TryGetValue(drive.DriveLetter, out byte di) && di == driveIndex)
+                {
+                    string rootPath = drive.DriveLetter + "\\";
+                    Task.Run(() => NetworkDriveDetector.RunImpersonated(() =>
+                        RescanNetworkDrive(rootPath, drive.DriveLetter, driveIndex,
+                            _currentSettings.ExcludePatterns, _cts.Token)));
+                    return;
+                }
+            }
+
+            // カスタムフォルダ？
+            if (_currentSettings.CustomFolders != null)
+            {
+                foreach (var folder in _currentSettings.CustomFolders)
+                {
+                    if (string.IsNullOrWhiteSpace(folder.FolderPath)) continue;
+                    if (_customFolderIndexMap.TryGetValue(folder.FolderPath, out byte di) && di == driveIndex)
+                    {
+                        string cacheKey = GetCustomFolderCacheKey(folder.FolderPath);
+                        Task.Run(() => NetworkDriveDetector.RunImpersonated(() =>
+                            RescanCustomFolder(folder.FolderPath, cacheKey, driveIndex,
+                                _currentSettings.ExcludePatterns, _cts.Token)));
+                        return;
+                    }
+                }
             }
         }
 
@@ -432,6 +534,7 @@ namespace TNDexplorer.Core
         private void RescanNetworkDrive(string rootPath, string driveLetter,
             byte driveIndex, IReadOnlyList<string> excludePatterns, CancellationToken ct)
         {
+            lock (_rescanGuardLock) { _rescanInProgress.Add(driveIndex); }
             var scanner = new NetworkDriveScanner();
 
             try
@@ -441,6 +544,7 @@ namespace TNDexplorer.Core
                 // Replace index entries for this drive
                 _index.RemoveEntriesForDrive(driveIndex);
                 _index.AddEntries(driveIndex, entries);
+                ResetNetworkFrnCounter(driveIndex);
 
                 // Update cache (with retry for transient IO errors)
                 SaveCacheWithRetry(driveLetter, entries);
@@ -453,6 +557,10 @@ namespace TNDexplorer.Core
             catch (Exception ex)
             {
                 Debug.WriteLine($"Network rescan failed for {rootPath}: {ex}");
+            }
+            finally
+            {
+                lock (_rescanGuardLock) { _rescanInProgress.Remove(driveIndex); }
             }
         }
 
@@ -561,6 +669,7 @@ namespace TNDexplorer.Core
         private void RescanCustomFolder(string rootPath, string cacheKey, byte driveIndex,
             IReadOnlyList<string> excludePatterns, CancellationToken ct)
         {
+            lock (_rescanGuardLock) { _rescanInProgress.Add(driveIndex); }
             var scanner = new NetworkDriveScanner();
 
             try
@@ -570,6 +679,7 @@ namespace TNDexplorer.Core
 
                 _index.RemoveEntriesForDrive(driveIndex);
                 _index.AddEntries(driveIndex, entries);
+                ResetNetworkFrnCounter(driveIndex);
 
                 SaveCacheWithRetry(cacheKey, entries);
 
@@ -581,6 +691,10 @@ namespace TNDexplorer.Core
             catch (Exception ex)
             {
                 Debug.WriteLine($"Custom folder rescan failed for {rootPath}: {ex}");
+            }
+            finally
+            {
+                lock (_rescanGuardLock) { _rescanInProgress.Remove(driveIndex); }
             }
         }
 
@@ -612,6 +726,40 @@ namespace TNDexplorer.Core
             // Sanitize path for use as filename: replace \ / : with _
             string safe = folderPath.Replace("\\", "_").Replace("/", "_").Replace(":", "_");
             return "CF_" + safe;
+        }
+
+        /// <summary>
+        /// 指定ネットワークドライブ用に、既存FRNと衝突しない擬似FRNを採番する。
+        /// 初回呼び出し時に現在の最大FRNからシードする。
+        /// 不変条件: カウンタは単調増加。フルスキャンでエントリを 1..M に入れ替えた際は
+        /// ResetNetworkFrnCounter で破棄し、次回採番時に新しい最大値から再シードする。
+        /// </summary>
+        private ulong AllocateNetworkFrn(byte driveIndex)
+        {
+            lock (_frnCounterLock)
+            {
+                if (!_networkFrnCounter.TryGetValue(driveIndex, out ulong current))
+                {
+                    ulong max = 0;
+                    foreach (var e in _index.GetEntriesForDrive(driveIndex))
+                        if (e.FileReferenceNumber > max) max = e.FileReferenceNumber;
+                    current = max;
+                }
+                current++;
+                _networkFrnCounter[driveIndex] = current;
+                return current;
+            }
+        }
+
+        /// <summary>
+        /// フルスキャンでドライブのエントリを総入れ替えした後に呼ぶ。次回採番時に再シードさせる。
+        /// </summary>
+        private void ResetNetworkFrnCounter(byte driveIndex)
+        {
+            lock (_frnCounterLock)
+            {
+                _networkFrnCounter.Remove(driveIndex);
+            }
         }
 
         private void OnRescanTimerTick(object state)
@@ -854,6 +1002,7 @@ namespace TNDexplorer.Core
                 // Disable timer callbacks before Dispose to prevent firing during cleanup
                 _rescanTimer?.Change(Timeout.Infinite, Timeout.Infinite);
                 _rescanTimer?.Dispose();
+                _changeMonitor?.Dispose();
 
                 // Save caches before disposing (Everythingのアプリ終了時保存と同様)
                 SaveAllCaches();

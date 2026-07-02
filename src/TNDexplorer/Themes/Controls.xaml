@@ -194,16 +194,108 @@
         </Setter>
     </Style>
 
-    <!-- ===== CheckBox ===== -->
+    <!-- ===== CheckBox (fully templated; theme-following) ===== -->
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
         <Setter Property="Background" Value="{DynamicResource App.SurfaceBg}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent"
+                                SnapsToDevicePixels="True">
+                        <Border x:Name="Box" Width="14" Height="14"
+                                CornerRadius="3" BorderThickness="1"
+                                VerticalAlignment="Center"
+                                BorderBrush="{DynamicResource App.Border}"
+                                Background="{TemplateBinding Background}">
+                            <Grid>
+                                <!-- Checkmark (IsChecked=True) -->
+                                <Path x:Name="Check" Visibility="Collapsed"
+                                      Stretch="None" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Data="M 1 5 L 5 9 L 12 1"
+                                      Stroke="{DynamicResource App.AccentForeground}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"/>
+                                <!-- Indeterminate (IsChecked=null) -->
+                                <Rectangle x:Name="Indet" Visibility="Collapsed"
+                                           Width="8" Height="8" RadiusX="1" RadiusY="1"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Fill="{DynamicResource App.Accent}"/>
+                            </Grid>
+                        </Border>
+                        <ContentPresenter x:Name="Content" Margin="6,0,0,0"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource App.Accent}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Indet" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ===== RadioButton (implicit; keyed SegmentRadio is unaffected) ===== -->
     <Style TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
         <Setter Property="Background" Value="{DynamicResource App.SurfaceBg}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <StackPanel Orientation="Horizontal" Background="Transparent"
+                                SnapsToDevicePixels="True">
+                        <Grid Width="14" Height="14" VerticalAlignment="Center">
+                            <Ellipse x:Name="Box" Width="14" Height="14"
+                                     StrokeThickness="1"
+                                     Stroke="{DynamicResource App.Border}"
+                                     Fill="{TemplateBinding Background}"/>
+                            <Ellipse x:Name="Dot" Width="6" Height="6" Visibility="Collapsed"
+                                     Fill="{DynamicResource App.Accent}"/>
+                        </Grid>
+                        <ContentPresenter x:Name="Content" Margin="6,0,0,0"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Box" Property="Stroke" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="Stroke" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Box" Property="Stroke" Value="{DynamicResource App.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ===== Label ===== -->
@@ -297,6 +389,33 @@
         <Setter Property="Background" Value="{DynamicResource App.SurfaceBg}"/>
         <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
+    </Style>
+
+    <!-- ===== GridViewColumnHeader (implicit; theme-following) ===== -->
+    <Style TargetType="GridViewColumnHeader">
+        <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridViewColumnHeader">
+                    <Border Background="Transparent"
+                            BorderBrush="{DynamicResource App.Border}"
+                            BorderThickness="0,0,0,1"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ===== ComboBox arrow ToggleButton (used by ComboBox template) ===== -->

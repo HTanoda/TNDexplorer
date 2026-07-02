@@ -4,8 +4,8 @@
         xmlns:converters="clr-namespace:TNDexplorer.Converters"
         Title="TNDexplorer"
         Icon="/Resources/app.ico"
-        Width="900"
-        Height="600"
+        Width="1180"
+        Height="720"
         MinWidth="600" MinHeight="400"
         Background="{DynamicResource App.WindowBg}"
         WindowStartupLocation="CenterScreen">
@@ -52,20 +52,18 @@
                         </StackPanel>
                     </ToggleButton>
                     <ToggleButton IsChecked="{Binding IsAdvancedSearchVisible}" Style="{StaticResource ChipToggle}"
-                                  Margin="0,0,4,0" ToolTip="高度な検索オプション">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE71C;" FontSize="12"
-                                       VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBlock Text="詳細" VerticalAlignment="Center"/>
-                        </StackPanel>
+                                  Margin="0,0,4,0"
+                                  ToolTip="詳細検索 — 拡張子・サイズ・日付・フォルダで絞り込み"
+                                  ToolTipService.InitialShowDelay="300">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE71C;" FontSize="14"
+                                   VerticalAlignment="Center"/>
                     </ToggleButton>
                     <ToggleButton IsChecked="{Binding IsPreviewVisible}" Style="{StaticResource ChipToggle}"
-                                  Margin="0,0,8,0" ToolTip="プレビュー表示の切り替え">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A1;" FontSize="12"
-                                       VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBlock Text="プレビュー" VerticalAlignment="Center"/>
-                        </StackPanel>
+                                  Margin="0,0,8,0"
+                                  ToolTip="プレビュー表示の切り替え"
+                                  ToolTipService.InitialShowDelay="300">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A1;" FontSize="14"
+                                   VerticalAlignment="Center"/>
                     </ToggleButton>
                     <Button Command="{Binding ExportCsvCommand}" Style="{StaticResource IconButton}"
                             Content="&#xE896;" ToolTip="CSV出力"/>
@@ -100,7 +98,7 @@
                                FontSize="13" Foreground="{DynamicResource App.StatusBusy}" Margin="0,0,3,0"/>
                     <ComboBox ItemsSource="{Binding FavoriteFilters}"
                               SelectedItem="{Binding SelectedFavorite}"
-                              FontSize="11" Width="140" Padding="3,2"
+                              FontSize="11" Width="120" Padding="3,2"
                               BorderThickness="1" BorderBrush="{DynamicResource App.Border}"
                               ToolTip="お気に入りフィルタを選択">
                         <ComboBox.ItemTemplate>
@@ -126,6 +124,7 @@
                 <!-- Search box (editable combo with history) wrapped for icons -->
                 <Border BorderBrush="{DynamicResource App.Border}" BorderThickness="1"
                         CornerRadius="6" Background="{DynamicResource App.WindowBg}"
+                        MinWidth="220"
                         VerticalAlignment="Center">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Left" FontFamily="Segoe MDL2 Assets" Text="&#xE721;"

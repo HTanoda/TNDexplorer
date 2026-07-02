@@ -6,7 +6,10 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Icon="/Resources/app.ico">
+        Icon="/Resources/app.ico"
+        Background="{DynamicResource App.WindowBg}"
+        Foreground="{DynamicResource App.TextPrimary}"
+        TextElement.Foreground="{DynamicResource App.TextPrimary}">
 
     <Grid Margin="25">
         <Grid.RowDefinitions>
@@ -22,19 +25,19 @@
                    RenderOptions.BitmapScalingMode="HighQuality"/>
             <StackPanel VerticalAlignment="Center">
                 <TextBlock Text="TNDexplorer" FontSize="22" FontWeight="Bold"/>
-                <TextBlock Text="バージョン 1.2.0.0" FontSize="13" Foreground="#FF666666"/>
+                <TextBlock Text="バージョン 1.3.0.0" FontSize="13" Foreground="{DynamicResource App.TextSecondary}"/>
             </StackPanel>
         </StackPanel>
 
-        <TextBlock Grid.Row="1" FontSize="12" Margin="0,0,0,10" Foreground="#FF444444">
+        <TextBlock Grid.Row="1" FontSize="12" Margin="0,0,0,10" Foreground="{DynamicResource App.TextPrimary}">
             超高速ファイル検索ツール (NTFS MFT + ネットワークドライブ対応)
         </TextBlock>
 
         <!-- License -->
-        <Border Grid.Row="2" Background="#FFF8F8F8" CornerRadius="4" Padding="12,10"
-                BorderBrush="#FFE0E0E0" BorderThickness="1">
+        <Border Grid.Row="2" Background="{DynamicResource App.SurfaceBg}" CornerRadius="4" Padding="12,10"
+                BorderBrush="{DynamicResource App.Border}" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock TextWrapping="Wrap" FontSize="11" FontFamily="Consolas" Foreground="#FF333333">
+                <TextBlock TextWrapping="Wrap" FontSize="11" FontFamily="Consolas" Foreground="{DynamicResource App.TextPrimary}">
 MIT License
 
 Copyright (c) TND ( Hiroki Tanoda )
@@ -61,6 +64,7 @@ SOFTWARE.
         </Border>
 
         <Button Grid.Row="3" Content="閉じる" Width="80" Height="28"
+                Style="{StaticResource ChipButton}"
                 Click="OnCloseClick" HorizontalAlignment="Right" Margin="0,12,0,0"
                 IsCancel="True"/>
     </Grid>

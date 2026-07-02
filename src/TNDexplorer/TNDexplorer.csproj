@@ -90,6 +90,18 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="Themes\Light.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\Dark.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\Controls.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Resources\Styles.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -148,7 +160,9 @@
     <Compile Include="Converters\BindableInlines.cs" />
     <Compile Include="Converters\AlternateRowColorConverter.cs" />
     <Compile Include="Converters\IntToBoolConverter.cs" />
+    <Compile Include="Services\AppLog.cs" />
     <Compile Include="Services\SettingsService.cs" />
+    <Compile Include="Services\ThemeManager.cs" />
     <Compile Include="Services\FileOperationService.cs" />
     <Compile Include="Services\NetworkIndexCache.cs" />
     <Compile Include="Services\AppRegistration.cs" />

@@ -1,7 +1,10 @@
 using System;
 using System.Diagnostics;
+using System.Reflection;
 using System.Security.Principal;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using TNDexplorer.Core;
 using TNDexplorer.Models;
 using TNDexplorer.Services;
@@ -16,6 +19,12 @@ namespace TNDexplorer
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
+            RegisterGlobalExceptionHandlers();
+
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            AppLog.Info("App", $"アプリ起動 v{version}");
+            Task.Run(() => AppLog.CleanupOldLogs());
+
             // Handle --uninstall command (before admin check, so it works from "Programs & Features")
             var args = Environment.GetCommandLineArgs();
             for (int i = 1; i < args.Length; i++)
@@ -45,6 +54,9 @@ namespace TNDexplorer
             var settingsService = new SettingsService();
             var settings = settingsService.Load();
 
+            // Apply saved theme before any window is created (idempotent).
+            ThemeManager.Apply(settings.Theme);
+
             // First run: show setup wizard
             if (settings.IsFirstRun)
             {
@@ -73,6 +85,7 @@ namespace TNDexplorer
                 var settingsVm = new SettingsViewModel(settingsService);
                 settingsVm.ManualRescanAction = () => _indexManager.RequestManualRescan();
                 settingsVm.RescanCustomFolderAction = fp => _indexManager.RequestRescanCustomFolder(fp);
+                settingsVm.ClearSearchHistoryAction = () => mainVm.ClearSearchHistoryFromSettings();
                 var settingsDialog = new SettingsDialog
                 {
                     DataContext = settingsVm,
@@ -84,16 +97,19 @@ namespace TNDexplorer
                     // Reload favorites in main VM (no restart needed for favorites-only changes)
                     mainVm.ReloadFavorites();
 
-                    // Settings changed - restart the application for drive changes
-                    var restartResult = MessageBox.Show(
-                        "設定が保存されました。ドライブ設定の変更を適用するにはアプリケーションの再起動が必要です。\n\n今すぐ再起動しますか?",
-                        "設定変更",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (restartResult == MessageBoxResult.Yes)
+                    // Only prompt for restart when a startup-only setting actually changed
+                    if (settingsVm.RequiresRestart)
                     {
-                        RestartApp();
+                        var restartResult = MessageBox.Show(
+                            "設定が保存されました。ドライブ設定の変更を適用するにはアプリケーションの再起動が必要です。\n\n今すぐ再起動しますか?",
+                            "設定変更",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+
+                        if (restartResult == MessageBoxResult.Yes)
+                        {
+                            RestartApp();
+                        }
                     }
                 }
             };
@@ -116,6 +132,51 @@ namespace TNDexplorer
 
             // Start indexing in the background
             _ = mainVm.StartIndexingAsync();
+        }
+
+        private void RegisterGlobalExceptionHandlers()
+        {
+            DispatcherUnhandledException += (s, e) =>
+            {
+                try
+                {
+                    AppLog.Error("Unhandled", "DispatcherUnhandledException", e.Exception);
+                    MessageBox.Show(
+                        "予期しないエラーが発生しました。処理は継続します。\n" +
+                        "詳細はログ (%LOCALAPPDATA%\\TNDexplorer\\logs) を確認してください。",
+                        "エラー", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    e.Handled = true;
+                }
+                catch
+                {
+                    e.Handled = true;
+                }
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                try
+                {
+                    var ex = e.ExceptionObject as Exception;
+                    AppLog.Error("Unhandled",
+                        $"AppDomain.UnhandledException (IsTerminating={e.IsTerminating})", ex);
+                }
+                catch
+                {
+                }
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                try
+                {
+                    AppLog.Warn("Unhandled", "UnobservedTaskException: " + e.Exception);
+                    e.SetObserved();
+                }
+                catch
+                {
+                }
+            };
         }
 
         protected override void OnExit(ExitEventArgs e)

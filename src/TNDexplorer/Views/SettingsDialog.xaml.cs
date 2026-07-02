@@ -11,6 +11,7 @@ namespace TNDexplorer.Views
         public SettingsDialog()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => Services.ThemeManager.ApplyToWindow(this);
         }
 
         private void OnSaveClick(object sender, RoutedEventArgs e)

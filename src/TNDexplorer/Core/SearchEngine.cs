@@ -31,6 +31,7 @@ namespace TNDexplorer.Core
         public int ScannedFiles { get; set; }
         public int TotalFiles { get; set; }
         public int MatchedFiles { get; set; }
+        public int FailedFiles { get; set; }
         public bool IsCompleted { get; set; }
     }
 
@@ -197,6 +198,7 @@ namespace TNDexplorer.Core
                     var results = new ConcurrentBag<FileResultItem>();
                     int scannedCount = 0;
                     int matchedCount = 0;
+                    int failedCount = 0;
                     var comparison = advancedOptions.CaseSensitive
                         ? StringComparison.Ordinal
                         : StringComparison.OrdinalIgnoreCase;
@@ -236,7 +238,7 @@ namespace TNDexplorer.Core
 
                             SearchFileContent(file, extractor, query, comparison,
                                 maxResults, results, ref scannedCount, ref matchedCount,
-                                totalFiles, progress);
+                                ref failedCount, totalFiles, progress);
                         });
                     }
                     catch (OperationCanceledException) { }
@@ -253,7 +255,7 @@ namespace TNDexplorer.Core
 
                                 SearchFileContent(file, extractor, query, comparison,
                                     maxResults, results, ref scannedCount, ref matchedCount,
-                                    totalFiles, progress);
+                                    ref failedCount, totalFiles, progress);
                             }
                         });
                         staThread.SetApartmentState(ApartmentState.STA);
@@ -268,6 +270,7 @@ namespace TNDexplorer.Core
                         ScannedFiles = scannedCount,
                         TotalFiles = totalFiles,
                         MatchedFiles = matchedCount,
+                        FailedFiles = failedCount,
                         IsCompleted = true,
                     });
 
@@ -474,6 +477,7 @@ namespace TNDexplorer.Core
             ConcurrentBag<FileResultItem> results,
             ref int scannedCount,
             ref int matchedCount,
+            ref int failedCount,
             int totalFiles,
             IProgress<ContentSearchProgress> progress)
         {
@@ -521,7 +525,12 @@ namespace TNDexplorer.Core
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                int failed = Interlocked.Increment(ref failedCount);
+                if (failed <= 10)
+                    TNDexplorer.Services.AppLog.Warn("ContentSearch", $"{file.FullPath}: {ex.GetType().Name}");
+            }
 
             int sc = Interlocked.Increment(ref scannedCount);
             if (sc % 50 == 0 || sc == totalFiles)

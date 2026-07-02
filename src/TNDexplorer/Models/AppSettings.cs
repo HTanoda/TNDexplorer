@@ -36,6 +36,8 @@ namespace TNDexplorer.Models
             NetworkChangeMonitorEnabled = false;
             DailyRescanHour = 12;
             DailyRescanMinute = 30;
+            Theme = "Light";
+            SearchHistoryEnabled = true;
         }
 
         [OnDeserialized]
@@ -49,6 +51,12 @@ namespace TNDexplorer.Models
             {
                 RescanMode = RescanMode.Manual;
             }
+
+            if (SearchHistory == null)
+                SearchHistory = new List<string>();
+
+            if (string.IsNullOrEmpty(Theme))
+                Theme = "Light";
         }
 
         [DataMember]
@@ -142,6 +150,24 @@ namespace TNDexplorer.Models
         /// </summary>
         [DataMember]
         public List<string> ColumnOrder { get; set; }
+
+        /// <summary>
+        /// 検索履歴（MRU、最大20件、先頭が最新）。
+        /// </summary>
+        [DataMember]
+        public List<string> SearchHistory { get; set; } = new List<string>();
+
+        /// <summary>
+        /// 検索履歴の記録を有効にするか（既定true）。
+        /// </summary>
+        [DataMember]
+        public bool SearchHistoryEnabled { get; set; } = true;
+
+        /// <summary>
+        /// アプリのテーマ。"Light"（既定）または "Dark"。
+        /// </summary>
+        [DataMember]
+        public string Theme { get; set; } = "Light";
     }
 
     [DataContract]

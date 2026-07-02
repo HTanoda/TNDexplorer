@@ -15,6 +15,7 @@ namespace TNDexplorer.Views
         public FolderBrowseDialog()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => Services.ThemeManager.ApplyToWindow(this);
         }
 
         private void OnBrowseClick(object sender, RoutedEventArgs e)

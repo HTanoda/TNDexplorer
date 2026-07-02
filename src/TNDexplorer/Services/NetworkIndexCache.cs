@@ -30,7 +30,6 @@ namespace TNDexplorer.Services
     public class NetworkIndexCache
     {
         private readonly string _cacheDir;
-        private readonly string _logPath;
 
         private static readonly byte[] Magic = { (byte)'T', (byte)'N', (byte)'D', (byte)'c' };
         private const ushort FormatVersion = 1;
@@ -52,7 +51,6 @@ namespace TNDexplorer.Services
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             _cacheDir = Path.Combine(appData, "TNDexplorer", "cache");
-            _logPath = Path.Combine(appData, "TNDexplorer", "cache_error.log");
         }
 
         private string GetCachePath(string cacheKey)
@@ -253,23 +251,7 @@ namespace TNDexplorer.Services
 
         private void LogError(string operation, string cacheKey, Exception ex)
         {
-            try
-            {
-                string dir = Path.GetDirectoryName(_logPath);
-                if (!Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                string message = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {operation} failed for '{cacheKey}': {ex.GetType().Name}: {ex.Message}\r\n";
-                if (ex.InnerException != null)
-                    message += $"  Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}\r\n";
-                message += $"  StackTrace: {ex.StackTrace}\r\n";
-
-                File.AppendAllText(_logPath, message, Encoding.UTF8);
-            }
-            catch
-            {
-                System.Diagnostics.Debug.WriteLine($"NetworkIndexCache.{operation} failed: {ex.Message}");
-            }
+            AppLog.Error("NetworkIndexCache", $"{operation} failed for '{cacheKey}'", ex);
         }
     }
 

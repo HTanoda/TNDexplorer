@@ -5,7 +5,10 @@
         Width="550" Height="500"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        ShowInTaskbar="True">
+        ShowInTaskbar="True"
+        Background="{DynamicResource App.WindowBg}"
+        Foreground="{DynamicResource App.TextPrimary}"
+        TextElement.Foreground="{DynamicResource App.TextPrimary}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -24,8 +27,8 @@
         <!-- Install notice -->
         <TextBlock Grid.Row="1" TextWrapping="Wrap" Margin="0,0,0,10" FontSize="12">
             <Run Text="このアプリをインストールしますか？"/>
-            <Run Text="[開始] をクリックすると、アプリがPCにインストールされます。" Foreground="Gray"/>
-            <Run Text="インストールしない場合はこのウィンドウを閉じてください。" Foreground="Gray"/>
+            <Run Text="[開始] をクリックすると、アプリがPCにインストールされます。" Foreground="{DynamicResource App.TextSecondary}"/>
+            <Run Text="インストールしない場合はこのウィンドウを閉じてください。" Foreground="{DynamicResource App.TextSecondary}"/>
         </TextBlock>
 
         <!-- Local Drives -->
@@ -38,7 +41,7 @@
                     <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" Width="200"/>
-                            <TextBlock Text="{Binding SizeInfo}" Foreground="Gray" Margin="10,0,0,0"/>
+                            <TextBlock Text="{Binding SizeInfo}" Foreground="{DynamicResource App.TextSecondary}" Margin="10,0,0,0"/>
                         </StackPanel>
                     </CheckBox>
                 </DataTemplate>
@@ -50,7 +53,7 @@
                    FontSize="14" FontWeight="SemiBold" Margin="0,5,0,5"/>
 
         <Grid Grid.Row="5" Margin="0,0,0,10">
-            <TextBlock Foreground="Gray" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top">
+            <TextBlock Foreground="{DynamicResource App.TextSecondary}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Top">
                 <Run Text="ネットワークドライブや共有フォルダを検索対象に追加したい場合は、"/>
                 <LineBreak/>
                 <Run Text="起動後に [設定] → [ドライブ] → [フォルダ] から手動で追加できます。"/>

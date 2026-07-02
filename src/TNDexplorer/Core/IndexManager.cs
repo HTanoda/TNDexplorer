@@ -517,7 +517,7 @@ namespace TNDexplorer.Core
                 SaveCacheWithRetry(driveLetter, entries);
 
                 RaiseProgress(
-                    $"{rootPath} 完了 ({entries.Count:N0} 件)",
+                    $"{rootPath} 完了 ({entries.Count:N0} 件){FormatScanErrorSuffix(rootPath, scanner.ErrorCount)}",
                     _index.TotalCount,
                     IndexingState.Indexing);
             }
@@ -652,7 +652,7 @@ namespace TNDexplorer.Core
                 SaveCacheWithRetry(cacheKey, entries);
 
                 RaiseProgress(
-                    $"{rootPath} 完了 ({entries.Count:N0} 件)",
+                    $"{rootPath} 完了 ({entries.Count:N0} 件){FormatScanErrorSuffix(rootPath, scanner.ErrorCount)}",
                     _index.TotalCount,
                     IndexingState.Indexing);
             }
@@ -909,6 +909,13 @@ namespace TNDexplorer.Core
             }
         }
 
+        private static string FormatScanErrorSuffix(string target, int errorCount)
+        {
+            if (errorCount <= 0) return "";
+            TNDexplorer.Services.AppLog.Warn("NetworkScan", $"{target}: アクセスできない項目 {errorCount}件");
+            return $"（アクセスできない項目 {errorCount}件）";
+        }
+
         private void RaiseProgress(string message, int totalEntries, IndexingState state)
         {
             ProgressChanged?.Invoke(this, new IndexingProgressEventArgs
@@ -1007,13 +1014,23 @@ namespace TNDexplorer.Core
                 // Save caches before disposing (Everythingのアプリ終了時保存と同様)
                 SaveAllCaches();
 
-                foreach (var monitor in _usnMonitors)
+                UsnJournalMonitor[] monitors;
+                lock (_usnMonitors)
+                {
+                    monitors = _usnMonitors.ToArray();
+                    _usnMonitors.Clear();
+                }
+                foreach (var monitor in monitors)
                     monitor.Dispose();
-                _usnMonitors.Clear();
 
-                foreach (var reader in _mftReaders)
+                MftReader[] readers;
+                lock (_mftReaders)
+                {
+                    readers = _mftReaders.ToArray();
+                    _mftReaders.Clear();
+                }
+                foreach (var reader in readers)
                     reader.Dispose();
-                _mftReaders.Clear();
 
                 _cts?.Dispose();
 

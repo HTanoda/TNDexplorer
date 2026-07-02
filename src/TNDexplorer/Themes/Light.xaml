@@ -1,0 +1,22 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="pack://application:,,,/Themes/Controls.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ===== Palette (Light) ===== -->
+    <SolidColorBrush x:Key="App.WindowBg" Color="#F4F5F7"/>
+    <SolidColorBrush x:Key="App.SurfaceBg" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.Border" Color="#DFE2E6"/>
+    <SolidColorBrush x:Key="App.TextPrimary" Color="#1B1D20"/>
+    <SolidColorBrush x:Key="App.TextSecondary" Color="#6D7480"/>
+    <SolidColorBrush x:Key="App.Accent" Color="#0067C0"/>
+    <SolidColorBrush x:Key="App.AccentForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="App.Selection" Color="#E3F0FB"/>
+    <SolidColorBrush x:Key="App.Hover" Color="#F0F3F6"/>
+    <SolidColorBrush x:Key="App.AltRow" Color="#F7F8FA"/>
+    <SolidColorBrush x:Key="App.StatusGood" Color="#2EA043"/>
+    <SolidColorBrush x:Key="App.StatusBusy" Color="#E2A600"/>
+
+</ResourceDictionary>

@@ -55,6 +55,9 @@ namespace TNDexplorer.ViewModels
         private bool _alternateRowColors;
         private bool _groupByFiscalYear;
 
+        // Search history settings
+        private bool _searchHistoryEnabled;
+
         // Rescan settings
         private int _rescanModeIndex;
         private int _dailyRescanHour;
@@ -80,6 +83,14 @@ namespace TNDexplorer.ViewModels
         private bool _isEditingFavorite;
         private SettingsFavoriteItem _editingFavoriteItem;
         private string _favRegisterButtonText = "登録";
+
+        // Snapshot of restart-requiring settings captured at load time
+        private string _restartSnapshot;
+
+        /// <summary>
+        /// True when a setting that only takes effect on startup was changed by this Save.
+        /// </summary>
+        public bool RequiresRestart { get; private set; }
 
         public ObservableCollection<DriveSelectionItem> LocalDrives { get; }
             = new ObservableCollection<DriveSelectionItem>();
@@ -170,6 +181,18 @@ namespace TNDexplorer.ViewModels
             get => _groupByFiscalYear;
             set => SetProperty(ref _groupByFiscalYear, value);
         }
+
+        public bool SearchHistoryEnabled
+        {
+            get => _searchHistoryEnabled;
+            set => SetProperty(ref _searchHistoryEnabled, value);
+        }
+
+        /// <summary>
+        /// Callback to clear the search history in the main window immediately.
+        /// Set by App.xaml.cs before showing the dialog.
+        /// </summary>
+        public Action ClearSearchHistoryAction { get; set; }
 
         public int RescanModeIndex
         {
@@ -265,6 +288,7 @@ namespace TNDexplorer.ViewModels
 
         public RelayCommand RefreshDrivesCommand { get; }
         public RelayCommand SaveCommand { get; }
+        public RelayCommand ClearSearchHistoryCommand { get; }
 
         public SettingsViewModel(SettingsService settingsService)
         {
@@ -273,6 +297,7 @@ namespace TNDexplorer.ViewModels
 
             RefreshDrivesCommand = new RelayCommand(RefreshDrives);
             SaveCommand = new RelayCommand(Save);
+            ClearSearchHistoryCommand = new RelayCommand(ClearSearchHistory);
 
             LoadSettings();
         }
@@ -287,6 +312,7 @@ namespace TNDexplorer.ViewModels
             ExcludePatternsText = string.Join("\n", _settings.ExcludePatterns ?? Enumerable.Empty<string>());
             AlternateRowColors = _settings.AlternateRowColors;
             GroupByFiscalYear = _settings.GroupByFiscalYear;
+            SearchHistoryEnabled = _settings.SearchHistoryEnabled;
 
             // Rescan settings
             RescanModeIndex = (int)_settings.RescanMode;
@@ -313,6 +339,38 @@ namespace TNDexplorer.ViewModels
             RefreshDrives();
             LoadFavorites();
             LoadCustomFolders();
+
+            _restartSnapshot = BuildRestartSnapshot();
+        }
+
+        /// <summary>
+        /// Builds a normalized string of settings that only take effect on startup:
+        /// local drive selection, custom folders (path+enabled, order-independent),
+        /// hidden/system file scan scope, rescan schedule, and network change monitoring.
+        /// </summary>
+        private string BuildRestartSnapshot()
+        {
+            var drives = string.Join(",", LocalDrives
+                .OrderBy(d => d.DriveLetter, StringComparer.OrdinalIgnoreCase)
+                .Select(d => d.DriveLetter + "=" + d.IsSelected));
+
+            var folders = string.Join(",", CustomFolders
+                .Select(f => (f.FolderPath ?? "") + "=" + f.IsSelected)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase));
+
+            bool monitor = IsAdvancedEnabled && NetworkChangeMonitorEnabled;
+
+            return string.Join("|",
+                drives,
+                folders,
+                "hidden=" + IncludeHiddenSystemFiles,
+                "advanced=" + IsAdvancedEnabled,
+                "mode=" + RescanModeIndex,
+                "hour=" + DailyRescanHour,
+                "minute=" + DailyRescanMinute,
+                "interval=" + NetworkRescanIntervalMinutes,
+                "monitor=" + monitor,
+                "max=" + MaxSearchResults);
         }
 
         private void LoadCustomFolders()
@@ -556,6 +614,9 @@ namespace TNDexplorer.ViewModels
             _settings.AlternateRowColors = AlternateRowColors;
             _settings.GroupByFiscalYear = GroupByFiscalYear;
 
+            // Save search history settings
+            _settings.SearchHistoryEnabled = SearchHistoryEnabled;
+
             // Save rescan settings (with Interval minimum enforcement)
             _settings.RescanMode = (RescanMode)RescanModeIndex;
             _settings.DailyRescanHour = DailyRescanHour;
@@ -578,7 +639,35 @@ namespace TNDexplorer.ViewModels
                 .ToList();
 
             _settings.IsFirstRun = false;
+            // 検索履歴はメイン画面と履歴削除が随時保存するため、古いリストで上書きしないよう最新を引き継ぐ
+            _settings.SearchHistory = _settingsService.Load().SearchHistory;
             _settingsService.Save(_settings);
+
+            var newSnapshot = BuildRestartSnapshot();
+            RequiresRestart = !string.Equals(newSnapshot, _restartSnapshot, StringComparison.Ordinal);
+            _restartSnapshot = newSnapshot;
+        }
+
+        private void ClearSearchHistory()
+        {
+            var confirm = System.Windows.MessageBox.Show(
+                "検索履歴をすべて削除しますか？",
+                "検索履歴の削除",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Question);
+            if (confirm != System.Windows.MessageBoxResult.Yes) return;
+
+            var fresh = _settingsService.Load();
+            fresh.SearchHistory = new System.Collections.Generic.List<string>();
+            _settingsService.Save(fresh);
+
+            ClearSearchHistoryAction?.Invoke();
+
+            System.Windows.MessageBox.Show(
+                "検索履歴を削除しました。",
+                "検索履歴の削除",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
         }
 
         /// <summary>

@@ -23,6 +23,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"ファイルを開けませんでした: {fullPath}", ex);
                 MessageBox.Show($"ファイルを開けませんでした:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -49,6 +50,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"フォルダを開けませんでした: {fullPath}", ex);
                 MessageBox.Show($"フォルダを開けませんでした:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -56,15 +58,24 @@ namespace TNDexplorer.Services
 
         public void CopyPathToClipboard(string fullPath)
         {
+            CopyPathToClipboard(new[] { fullPath });
+        }
+
+        public void CopyPathToClipboard(IReadOnlyList<string> fullPaths)
+        {
             // Use Win32 clipboard API directly instead of WPF Clipboard.SetText.
             // WPF uses OLE clipboard (COM-based) which throws CLIPBRD_E_CANT_OPEN
             // in admin-elevated processes. Win32 API avoids this entirely.
+            if (fullPaths == null || fullPaths.Count == 0)
+                return;
+
+            string text = string.Join("\r\n", fullPaths);
             const int maxRetries = 5;
             const int retryDelayMs = 50;
 
             for (int i = 0; i < maxRetries; i++)
             {
-                if (NativeSetClipboardText(fullPath))
+                if (NativeSetClipboardText(text))
                     return;
 
                 Thread.Sleep(retryDelayMs);
@@ -76,15 +87,23 @@ namespace TNDexplorer.Services
 
         public void CopyFileToClipboard(string fullPath)
         {
+            CopyFileToClipboard(new[] { fullPath });
+        }
+
+        public void CopyFileToClipboard(IReadOnlyList<string> fullPaths)
+        {
             // Use Win32 clipboard API directly instead of WPF Clipboard.SetFileDropList.
             // WPF uses OLE clipboard (COM-based) which throws CLIPBRD_E_CANT_OPEN
             // in admin-elevated processes.
+            if (fullPaths == null || fullPaths.Count == 0)
+                return;
+
             const int maxRetries = 5;
             const int retryDelayMs = 50;
 
             for (int i = 0; i < maxRetries; i++)
             {
-                if (NativeSetClipboardFileDropList(fullPath))
+                if (NativeSetClipboardFileDropList(fullPaths))
                     return;
 
                 Thread.Sleep(retryDelayMs);
@@ -96,9 +115,10 @@ namespace TNDexplorer.Services
 
         /// <summary>
         /// Sets clipboard file drop list using Win32 API (CF_HDROP format).
+        /// Multiple paths are stored as a double-null-terminated UTF-16 list.
         /// Returns true on success, false if clipboard is busy.
         /// </summary>
-        private static bool NativeSetClipboardFileDropList(string filePath)
+        private static bool NativeSetClipboardFileDropList(IReadOnlyList<string> filePaths)
         {
             if (!NativeMethods.OpenClipboard(IntPtr.Zero))
                 return false;
@@ -107,10 +127,14 @@ namespace TNDexplorer.Services
             {
                 NativeMethods.EmptyClipboard();
 
-                // DROPFILES structure: 20 bytes header + file path (UTF-16) + double null terminator
+                // DROPFILES structure: 20 bytes header + file list (UTF-16) + double null terminator.
+                // File list: each path followed by a null, then a final extra null (double-null terminator).
                 int headerSize = 20; // sizeof(DROPFILES)
-                int fileBytes = (filePath.Length + 1) * 2; // file path + null terminator (UTF-16)
-                int totalSize = headerSize + fileBytes + 2; // + final null terminator
+                int listChars = 0;
+                for (int i = 0; i < filePaths.Count; i++)
+                    listChars += filePaths[i].Length + 1; // path + null terminator
+                listChars += 1; // final null terminator
+                int totalSize = headerSize + listChars * 2;
 
                 IntPtr hGlobal = NativeMethods.GlobalAlloc(
                     NativeMethods.GMEM_MOVEABLE | NativeMethods.GMEM_ZEROINIT,
@@ -135,10 +159,15 @@ namespace TNDexplorer.Services
                     // DROPFILES.fWide = TRUE (Unicode)
                     Marshal.WriteInt32(pGlobal, 16, 1);
 
-                    // Write file path after header
-                    IntPtr pFiles = new IntPtr(pGlobal.ToInt64() + headerSize);
-                    Marshal.Copy(filePath.ToCharArray(), 0, pFiles, filePath.Length);
-                    // Null terminators already zeroed by GMEM_ZEROINIT
+                    // Write the null-separated file list after the header
+                    long offset = pGlobal.ToInt64() + headerSize;
+                    for (int i = 0; i < filePaths.Count; i++)
+                    {
+                        string path = filePaths[i];
+                        Marshal.Copy(path.ToCharArray(), 0, new IntPtr(offset), path.Length);
+                        offset += (path.Length + 1) * 2; // advance past path + null terminator
+                    }
+                    // Final null terminators already zeroed by GMEM_ZEROINIT
                 }
                 finally
                 {
@@ -226,6 +255,7 @@ namespace TNDexplorer.Services
                 }
                 catch (Exception ex)
                 {
+                    AppLog.Error("FileOperation", errorTitle, ex);
                     MessageBox.Show($"{errorTitle}:\n{ex.Message}",
                         "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
@@ -260,6 +290,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"CSVファイルの保存に失敗しました: {filePath}", ex);
                 MessageBox.Show($"CSVファイルの保存に失敗しました:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -302,6 +333,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"プロパティの表示に失敗しました: {fullPath}", ex);
                 MessageBox.Show($"プロパティの表示に失敗しました:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }

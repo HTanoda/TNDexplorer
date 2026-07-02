@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Diagnostics;
 using System.Linq;
 using TNDexplorer.Core;
+using TNDexplorer.Models;
 using TNDexplorer.ViewModels;
 
 namespace TNDexplorer.Views
@@ -38,6 +39,7 @@ namespace TNDexplorer.Views
         public MainWindow()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => Services.ThemeManager.ApplyToWindow(this);
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
             SizeChanged += MainWindow_SizeChanged;
@@ -45,8 +47,7 @@ namespace TNDexplorer.Views
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            SearchBox.Focus();
-            Keyboard.Focus(SearchBox);
+            FocusSearchBox();
 
             // Initially hide preview column
             PreviewColumn.Width = new GridLength(0);
@@ -94,9 +95,7 @@ namespace TNDexplorer.Views
             {
                 var vm = DataContext as MainViewModel;
                 if (vm != null) vm.SearchText = "";
-                SearchBox.Focus();
-                Keyboard.Focus(SearchBox);
-                SearchBox.SelectAll();
+                FocusSearchBox();
                 e.Handled = true;
             }
         }
@@ -877,6 +876,8 @@ namespace TNDexplorer.Views
             }
             catch { }
 
+            try { TNDexplorer.Services.AppLog.Info("App", "アプリ終了"); } catch { }
+
             // Immediate process termination via TerminateProcess.
             // Unlike Environment.Exit(0), this does NOT run CLR shutdown or COM finalizers,
             // so it cannot deadlock on STA/MTA cross-apartment COM release.
@@ -888,6 +889,33 @@ namespace TNDexplorer.Views
         {
             var vm = DataContext as MainViewModel;
             vm?.OnItemDoubleClick();
+        }
+
+        private void ResultsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var vm = DataContext as MainViewModel;
+            if (vm == null) return;
+            vm.SelectedResults = ResultsListView.SelectedItems.Cast<FileResultItem>().ToList();
+            vm.OnSelectionChanged();
+        }
+
+        /// <summary>
+        /// 検索ボックス（編集可能ComboBox）へフォーカスを移し、テキストを全選択する。
+        /// ComboBox内部の PART_EditableTextBox を対象にする。
+        /// </summary>
+        private void FocusSearchBox()
+        {
+            SearchBox.Focus();
+            var editableTextBox = SearchBox.Template?.FindName("PART_EditableTextBox", SearchBox) as TextBox;
+            if (editableTextBox != null)
+            {
+                Keyboard.Focus(editableTextBox);
+                editableTextBox.SelectAll();
+            }
+            else
+            {
+                Keyboard.Focus(SearchBox);
+            }
         }
 
         private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)

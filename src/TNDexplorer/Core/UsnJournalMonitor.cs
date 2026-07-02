@@ -229,6 +229,11 @@ namespace TNDexplorer.Core
             }
             else if ((reason & NativeConstants.USN_REASON_RENAME_NEW_NAME) != 0)
             {
+                if (_index.TryGetEntry(_driveIndex, fileReferenceNumber, out var existing) && existing != null)
+                {
+                    entry.Size = existing.Size;
+                    entry.ModifiedDate = existing.ModifiedDate;
+                }
                 _index.UpdateEntry(_driveIndex, fileReferenceNumber, entry);
                 FileChanged?.Invoke(this, new FileChangeEventArgs
                 {

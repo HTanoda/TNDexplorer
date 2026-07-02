@@ -105,29 +105,9 @@ namespace TNDexplorer.Core
         private static readonly ConcurrentDictionary<string, string> _uncToDriveCache
             = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>
-        /// Diagnostic log path for drive letter mapping operations.
-        /// Written to %LOCALAPPDATA%\TNDexplorer\drive_mapping.log
-        /// </summary>
-        private static readonly string _driveMappingLogPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TNDexplorer", "drive_mapping.log");
-
         private static void LogDriveMapping(string message)
         {
-            try
-            {
-                string dir = Path.GetDirectoryName(_driveMappingLogPath);
-                if (!Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}\r\n";
-                File.AppendAllText(_driveMappingLogPath, line, System.Text.Encoding.UTF8);
-            }
-            catch
-            {
-                Debug.WriteLine($"LogDriveMapping failed: {message}");
-            }
+            TNDexplorer.Services.AppLog.Info("DriveMapping", message);
         }
 
         /// <summary>

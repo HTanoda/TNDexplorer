@@ -7,6 +7,7 @@
         Width="900"
         Height="600"
         MinWidth="600" MinHeight="400"
+        Background="{DynamicResource App.WindowBg}"
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
@@ -22,55 +23,60 @@
 
     <DockPanel>
         <!-- Top: Search Bar + Filters -->
-        <Border DockPanel.Dock="Top" Background="#FFF3F3F3"
-                BorderBrush="#FFD1D1D1" BorderThickness="0,0,0,1"
+        <Border DockPanel.Dock="Top" Background="{DynamicResource App.SurfaceBg}"
+                BorderBrush="{DynamicResource App.Border}" BorderThickness="0,0,0,1"
                 Padding="8,6">
             <DockPanel>
                 <!-- Right side: filters, toggle, settings, favorites -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             VerticalAlignment="Center" Margin="10,0,0,0">
-                    <RadioButton Content="すべて" IsChecked="{Binding FilterAll}"
-                                 GroupName="Filter" Margin="0,0,6,0" VerticalContentAlignment="Center"/>
-                    <RadioButton Content="ファイル" IsChecked="{Binding FilterFiles}"
-                                 GroupName="Filter" Margin="0,0,6,0" VerticalContentAlignment="Center"/>
-                    <RadioButton Content="フォルダ" IsChecked="{Binding FilterFolders}"
-                                 GroupName="Filter" Margin="0,0,6,0" VerticalContentAlignment="Center"/>
-                    <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="6,2"/>
-                    <ToggleButton Content="内容検索" IsChecked="{Binding IsContentSearch}"
-                                  Padding="6,3" Cursor="Hand" FontSize="11"
+                    <!-- Filter segment (すべて/ファイル/フォルダ) -->
+                    <Border BorderBrush="{DynamicResource App.Border}" BorderThickness="1"
+                            CornerRadius="6" Padding="1" Margin="0,0,8,0"
+                            Background="{DynamicResource App.WindowBg}">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Content="すべて" IsChecked="{Binding FilterAll}"
+                                         GroupName="Filter" Style="{StaticResource SegmentRadio}"/>
+                            <RadioButton Content="ファイル" IsChecked="{Binding FilterFiles}"
+                                         GroupName="Filter" Style="{StaticResource SegmentRadio}"/>
+                            <RadioButton Content="フォルダ" IsChecked="{Binding FilterFolders}"
+                                         GroupName="Filter" Style="{StaticResource SegmentRadio}"/>
+                        </StackPanel>
+                    </Border>
+                    <ToggleButton IsChecked="{Binding IsContentSearch}" Style="{StaticResource ChipToggle}"
                                   Margin="0,0,4,0" ToolTip="内容検索モード: 詳細パネルでフォルダと拡張子を指定して検索">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton">
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="BorderBrush" Value="#FFD1D1D1"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Background" Value="#FF0078D4"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                        <Setter Property="BorderBrush" Value="#FF0060A8"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ToggleButton.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE721;" FontSize="12"
+                                       VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="内容検索" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </ToggleButton>
-                    <ToggleButton Content="▼ 詳細" IsChecked="{Binding IsAdvancedSearchVisible}"
-                                  Padding="6,3" Background="Transparent" BorderThickness="1"
-                                  BorderBrush="#FFD1D1D1" Cursor="Hand" FontSize="11"
-                                  Margin="0,0,4,0" ToolTip="高度な検索オプション"/>
-                    <Button Content="CSV出力" Command="{Binding ExportCsvCommand}"
-                            Padding="6,3" Background="Transparent" BorderThickness="1"
-                            BorderBrush="#FFD1D1D1" Cursor="Hand" FontSize="11"
-                            Margin="0,0,4,0" ToolTip="検索結果をCSVファイルに出力"/>
-                    <Button Content="設定" Command="{Binding OpenSettingsCommand}"
-                            Padding="8,4" Background="Transparent" BorderThickness="0"
-                            Cursor="Hand" FontSize="12"/>
-                    <ToggleButton Content="プレビュー" IsChecked="{Binding IsPreviewVisible}"
-                                  Padding="6,3" Background="Transparent" BorderThickness="1"
-                                  BorderBrush="#FFD1D1D1" Cursor="Hand" FontSize="11"
-                                  Margin="0,0,4,0" ToolTip="プレビュー表示の切り替え"/>
-                    <Menu Background="Transparent" VerticalAlignment="Center">
-                        <MenuItem Header="ヘルプ" FontSize="12" Padding="4,2">
+                    <ToggleButton IsChecked="{Binding IsAdvancedSearchVisible}" Style="{StaticResource ChipToggle}"
+                                  Margin="0,0,4,0" ToolTip="高度な検索オプション">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE71C;" FontSize="12"
+                                       VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="詳細" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton IsChecked="{Binding IsPreviewVisible}" Style="{StaticResource ChipToggle}"
+                                  Margin="0,0,8,0" ToolTip="プレビュー表示の切り替え">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A1;" FontSize="12"
+                                       VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="プレビュー" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <Button Command="{Binding ExportCsvCommand}" Style="{StaticResource IconButton}"
+                            Content="&#xE896;" ToolTip="CSV出力"/>
+                    <Button Command="{Binding OpenSettingsCommand}" Style="{StaticResource IconButton}"
+                            Content="&#xE713;" ToolTip="設定"/>
+                    <Menu Background="Transparent" VerticalAlignment="Center" Margin="0,0,0,0">
+                        <MenuItem ToolTip="ヘルプ" Padding="6" VerticalAlignment="Center">
+                            <MenuItem.Header>
+                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE897;" FontSize="15"
+                                           Foreground="{DynamicResource App.TextPrimary}"/>
+                            </MenuItem.Header>
                             <MenuItem Header="検索構文ガイド (_H)" Command="{Binding OpenHelpCommand}"/>
                             <Separator/>
                             <MenuItem Header="TNDexplorerについて (_A)" Command="{Binding OpenAboutCommand}"/>
@@ -78,12 +84,12 @@
                     </Menu>
                     <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="6,2"/>
                     <!-- Favorites: ComboBox + save/delete buttons -->
-                    <TextBlock Text="★" VerticalAlignment="Center" FontSize="13"
-                               Foreground="#FFFFC107" Margin="0,0,3,0"/>
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE734;" VerticalAlignment="Center"
+                               FontSize="13" Foreground="{DynamicResource App.StatusBusy}" Margin="0,0,3,0"/>
                     <ComboBox ItemsSource="{Binding FavoriteFilters}"
                               SelectedItem="{Binding SelectedFavorite}"
                               FontSize="11" Width="140" Padding="3,2"
-                              BorderThickness="1" BorderBrush="#FFD1D1D1"
+                              BorderThickness="1" BorderBrush="{DynamicResource App.Border}"
                               ToolTip="お気に入りフィルタを選択">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
@@ -91,46 +97,82 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Content="保存" FontSize="10"
+                    <Button Content="保存" FontSize="11"
                             Command="{Binding AddFavoriteCommand}"
-                            Padding="5,3" Margin="2,0,0,0"
-                            Background="Transparent" BorderThickness="1" BorderBrush="#FFD1D1D1"
-                            Cursor="Hand" ToolTip="現在の検索条件をお気に入りに保存"/>
-                    <Button Content="削除" FontSize="10"
+                            Style="{StaticResource ChipButton}" Padding="7,3" Margin="4,0,0,0"
+                            ToolTip="現在の検索条件をお気に入りに保存"/>
+                    <Button Content="削除" FontSize="11"
                             Command="{Binding RemoveFavoriteCommand}"
-                            Padding="5,3" Margin="2,0,0,0"
-                            Background="Transparent" BorderThickness="1" BorderBrush="#FFD1D1D1"
-                            Cursor="Hand" ToolTip="選択中のお気に入りを削除"/>
+                            Style="{StaticResource ChipButton}" Padding="7,3" Margin="4,0,0,0"
+                            ToolTip="選択中のお気に入りを削除"/>
                     <!-- Save feedback -->
                     <TextBlock Text="{Binding FavoriteSaveStatus}" FontSize="10"
-                               Foreground="#FF28A745" VerticalAlignment="Center"
+                               Foreground="{DynamicResource App.StatusGood}" VerticalAlignment="Center"
                                Margin="6,0,0,0"/>
                 </StackPanel>
 
-                <!-- Search box (editable combo with history) -->
-                <ComboBox x:Name="SearchBox"
-                          IsEditable="True"
-                          IsTextSearchEnabled="False"
-                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                          ItemsSource="{Binding SearchHistory}"
-                          StaysOpenOnEdit="True"
-                          FontSize="14"
-                          BorderThickness="1" BorderBrush="#FFD1D1D1"
-                          Background="White"
-                          VerticalContentAlignment="Center">
-                    <ComboBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding CommitSearchHistoryCommand}"/>
-                    </ComboBox.InputBindings>
-                </ComboBox>
+                <!-- Search box (editable combo with history) wrapped for icons -->
+                <Border BorderBrush="{DynamicResource App.Border}" BorderThickness="1"
+                        CornerRadius="6" Background="{DynamicResource App.WindowBg}"
+                        VerticalAlignment="Center">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" FontFamily="Segoe MDL2 Assets" Text="&#xE721;"
+                                   FontSize="14" Foreground="{DynamicResource App.TextSecondary}"
+                                   VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <Button DockPanel.Dock="Right" Command="{Binding ClearSearchCommand}"
+                                Content="&#xE711;" FontSize="12"
+                                Margin="2,0,4,0" ToolTip="クリア">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SearchText}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <ComboBox x:Name="SearchBox"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="False"
+                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                  ItemsSource="{Binding SearchHistory}"
+                                  StaysOpenOnEdit="True"
+                                  FontSize="14"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  VerticalContentAlignment="Center">
+                            <ComboBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding CommitSearchHistoryCommand}"/>
+                            </ComboBox.InputBindings>
+                        </ComboBox>
+                    </DockPanel>
+                </Border>
             </DockPanel>
         </Border>
 
         <!-- Advanced Search Panel (collapsible) -->
-        <Border DockPanel.Dock="Top" Background="#FFFAFAFA"
-                BorderBrush="#FFD1D1D1" BorderThickness="0,0,0,1"
+        <Border DockPanel.Dock="Top" Background="{DynamicResource App.WindowBg}"
+                BorderBrush="{DynamicResource App.Border}" BorderThickness="0,0,0,1"
                 Padding="10,4"
                 Visibility="{Binding IsAdvancedSearchVisible, Converter={StaticResource BoolToVisibility}}">
             <Grid>
+                <Grid.Resources>
+                    <Style TargetType="TextBox">
+                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="Padding" Value="4,2"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource App.Border}"/>
+                        <Setter Property="Background" Value="{DynamicResource App.SurfaceBg}"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                    </Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
+                    </Style>
+                    <Style TargetType="CheckBox">
+                        <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
+                    </Style>
+                </Grid.Resources>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -153,24 +195,16 @@
                            VerticalAlignment="Center" Margin="0,0,4,0"/>
                 <TextBox Grid.Row="0" Grid.Column="1"
                          Text="{Binding ExtensionFilter, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="11" Padding="3,2"
-                         BorderThickness="1" BorderBrush="#FFD1D1D1"
                          ToolTip="例: .pdf  .docx  .xlsx"/>
 
                 <TextBlock Grid.Row="0" Grid.Column="3" Text="サイズ(KB):" FontSize="11"
                            VerticalAlignment="Center" Margin="0,0,4,0"/>
                 <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal">
                     <TextBox Text="{Binding MinSizeText, UpdateSourceTrigger=PropertyChanged}"
-                             FontSize="11" Padding="3,2" Width="60"
-                             VerticalContentAlignment="Center"
-                             BorderThickness="1" BorderBrush="#FFD1D1D1"
-                             ToolTip="最小サイズ (KB)"/>
+                             Width="60" ToolTip="最小サイズ (KB)"/>
                     <TextBlock Text="～" VerticalAlignment="Center" FontSize="11" Margin="4,0"/>
                     <TextBox Text="{Binding MaxSizeText, UpdateSourceTrigger=PropertyChanged}"
-                             FontSize="11" Padding="3,2" Width="60"
-                             VerticalContentAlignment="Center"
-                             BorderThickness="1" BorderBrush="#FFD1D1D1"
-                             ToolTip="最大サイズ (KB)"/>
+                             Width="60" ToolTip="最大サイズ (KB)"/>
                 </StackPanel>
 
                 <CheckBox Grid.Row="0" Grid.Column="8"
@@ -184,12 +218,9 @@
                                    VerticalAlignment="Center" Margin="0,0,4,0"/>
                         <Button DockPanel.Dock="Right" Content="..." FontSize="11"
                                 Command="{Binding BrowseFolderCommand}"
-                                Padding="5,2" Margin="3,0,0,0"
-                                Background="Transparent" BorderThickness="1" BorderBrush="#FFD1D1D1"
-                                Cursor="Hand" ToolTip="フォルダ参照"/>
+                                Style="{StaticResource ChipButton}" Padding="7,2" Margin="3,0,0,0"
+                                ToolTip="フォルダ参照"/>
                         <TextBox Text="{Binding FolderPath, UpdateSourceTrigger=PropertyChanged}"
-                                 FontSize="11" Padding="3,2"
-                                 BorderThickness="1" BorderBrush="#FFD1D1D1"
                                  ToolTip="検索対象フォルダ"/>
                     </DockPanel>
                     <CheckBox Content="サブフォルダも検索" FontSize="11"
@@ -203,38 +234,60 @@
                             VerticalAlignment="Top">
                     <DatePicker SelectedDate="{Binding DateFrom}" FontSize="11"
                                 Width="110" Padding="2,1"
-                                BorderThickness="1" BorderBrush="#FFD1D1D1"/>
+                                BorderThickness="1" BorderBrush="{DynamicResource App.Border}"/>
                     <TextBlock Text="～" VerticalAlignment="Center" FontSize="11" Margin="4,0"/>
                     <DatePicker SelectedDate="{Binding DateTo}" FontSize="11"
                                 Width="110" Padding="2,1"
-                                BorderThickness="1" BorderBrush="#FFD1D1D1"/>
+                                BorderThickness="1" BorderBrush="{DynamicResource App.Border}"/>
                 </StackPanel>
 
-                <Button Grid.Row="2" Grid.Column="8" Content="条件クリア" FontSize="10"
+                <Button Grid.Row="2" Grid.Column="8" Content="条件クリア" FontSize="11"
                         Command="{Binding ClearAdvancedSearchCommand}"
-                        Padding="8,2" VerticalAlignment="Top" Margin="0,2,0,0"
-                        Background="Transparent" BorderThickness="1" BorderBrush="#FFD1D1D1"
-                        Cursor="Hand"/>
+                        Style="{StaticResource ChipButton}" Padding="8,2"
+                        VerticalAlignment="Top" Margin="0,2,0,0"/>
             </Grid>
         </Border>
 
         <!-- Bottom: Status Bar -->
-        <StatusBar DockPanel.Dock="Bottom" Background="#FFF3F3F3"
-                   BorderBrush="#FFD1D1D1" BorderThickness="0,1,0,0" Padding="4,2">
+        <StatusBar DockPanel.Dock="Bottom" Background="{DynamicResource App.SurfaceBg}"
+                   BorderBrush="{DynamicResource App.Border}" BorderThickness="0,1,0,0" Padding="4,2">
             <StatusBarItem>
-                <TextBlock Text="{Binding StatusText}" FontSize="12"/>
+                <Ellipse Width="8" Height="8" VerticalAlignment="Center">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Fill" Value="{DynamicResource App.StatusGood}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsIndexing}" Value="True">
+                                    <Setter Property="Fill" Value="{DynamicResource App.StatusBusy}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusText}" FontSize="12"
+                           Foreground="{DynamicResource App.TextPrimary}"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock Text="{Binding IndexStatusText}" FontSize="11" Foreground="Gray"/>
+                <TextBlock Text="{Binding IndexStatusText}" FontSize="11"
+                           Foreground="{DynamicResource App.TextSecondary}"/>
             </StatusBarItem>
             <Separator Visibility="{Binding IsContentSearch, Converter={StaticResource BoolToVisibility}}"/>
             <StatusBarItem Visibility="{Binding IsContentSearch, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="{Binding FullTextStatus}" FontSize="11" Foreground="#FF0078D4"/>
+                <TextBlock Text="{Binding FullTextStatus}" FontSize="11"
+                           Foreground="{DynamicResource App.Accent}"/>
             </StatusBarItem>
-            <StatusBarItem HorizontalAlignment="Right"
-                           Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVisibility}}">
-                <ProgressBar IsIndeterminate="True" Width="100" Height="12"/>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Enter: 開く / Ctrl+C: コピー / Ctrl+Shift+C: パスコピー"
+                               FontSize="11" Foreground="{DynamicResource App.TextSecondary}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ProgressBar IsIndeterminate="True" Width="100" Height="12"
+                                 VerticalAlignment="Center"
+                                 Visibility="{Binding IsIndexing, Converter={StaticResource BoolToVisibility}}"/>
+                </StackPanel>
             </StatusBarItem>
         </StatusBar>
 
@@ -256,9 +309,38 @@
                       ScrollViewer.IsDeferredScrollingEnabled="False"
                       ScrollViewer.CanContentScroll="True"
                       BorderThickness="0"
+                      Background="{DynamicResource App.SurfaceBg}"
+                      Foreground="{DynamicResource App.TextPrimary}"
                       MouseDoubleClick="ResultsListView_MouseDoubleClick"
                       SelectionChanged="ResultsListView_SelectionChanged"
                       GridViewColumnHeader.Click="GridViewColumnHeader_Click">
+                <ListView.Resources>
+                    <!-- Column header: transparent, secondary text, bottom underline -->
+                    <Style TargetType="GridViewColumnHeader">
+                        <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
+                        <Setter Property="FontSize" Value="12"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                        <Setter Property="Padding" Value="8,4"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="GridViewColumnHeader">
+                                    <Border Background="Transparent"
+                                            BorderBrush="{DynamicResource App.Border}"
+                                            BorderThickness="0,0,0,1"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.Resources>
                 <ListView.InputBindings>
                     <KeyBinding Key="Enter" Command="{Binding OpenFileCommand}"/>
                     <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyFileCommand}"/>
@@ -266,6 +348,36 @@
                 </ListView.InputBindings>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
+                        <Setter Property="Padding" Value="2,1"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <Border x:Name="Bd"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            Padding="{TemplateBinding Padding}"
+                                            SnapsToDevicePixels="True">
+                                        <GridViewRowPresenter VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background"
+                                                    Value="{DynamicResource App.Hover}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background"
+                                                    Value="{DynamicResource App.Selection}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                         <Style.Triggers>
                             <!-- Alternate row colors when enabled -->
                             <MultiDataTrigger>
@@ -275,7 +387,7 @@
                                     <Condition Binding="{Binding (ItemsControl.AlternationIndex),
                                         RelativeSource={RelativeSource Self}}" Value="1"/>
                                 </MultiDataTrigger.Conditions>
-                                <Setter Property="Background" Value="#FFF7F7F7"/>
+                                <Setter Property="Background" Value="{DynamicResource App.AltRow}"/>
                             </MultiDataTrigger>
                             <!-- Fiscal year boundary line -->
                             <MultiDataTrigger>
@@ -346,35 +458,35 @@
             <!-- Splitter -->
             <GridSplitter Grid.Column="1" Width="4"
                           HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                          Background="#FFD1D1D1"
+                          Background="{DynamicResource App.Border}"
                           Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}"/>
 
             <!-- Preview Panel -->
-            <Border Grid.Column="2" BorderBrush="#FFD1D1D1" BorderThickness="1,0,0,0"
+            <Border Grid.Column="2" BorderBrush="{DynamicResource App.Border}" BorderThickness="1,0,0,0"
                     Visibility="{Binding IsPreviewVisible, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <Border Grid.Row="0" Background="#FFF3F3F3" Padding="6,4"
-                            BorderBrush="#FFD1D1D1" BorderThickness="0,0,0,1">
+                    <Border Grid.Row="0" Background="{DynamicResource App.WindowBg}" Padding="6,4"
+                            BorderBrush="{DynamicResource App.Border}" BorderThickness="0,0,0,1">
                         <TextBlock Text="{Binding PreviewFileName}" FontSize="11"
-                                   TextTrimming="CharacterEllipsis" Foreground="#FF555555"/>
+                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource App.TextSecondary}"/>
                     </Border>
-                    <Border Grid.Row="1" x:Name="PreviewHostBorder" Background="White"
+                    <Border Grid.Row="1" x:Name="PreviewHostBorder" Background="{DynamicResource App.SurfaceBg}"
                             SizeChanged="PreviewHostBorder_SizeChanged">
                         <Grid>
                             <TextBlock x:Name="PreviewPlaceholder"
                                        Text="ファイルを選択するとプレビューが表示されます"
-                                       FontSize="11" Foreground="Gray"
+                                       FontSize="11" Foreground="{DynamicResource App.TextSecondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        TextWrapping="Wrap" TextAlignment="Center" Margin="10"/>
                             <!-- PDF preview: all pages rendered as bitmaps, scrollable -->
                             <ScrollViewer x:Name="PdfScrollViewer" Visibility="Collapsed"
                                           HorizontalScrollBarVisibility="Disabled"
                                           VerticalScrollBarVisibility="Auto"
-                                          Background="#FFE8E8E8">
+                                          Background="{DynamicResource App.WindowBg}">
                                 <StackPanel x:Name="PdfPagesPanel" Orientation="Vertical"/>
                             </ScrollViewer>
                         </Grid>

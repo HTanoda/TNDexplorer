@@ -107,13 +107,21 @@
                                Margin="6,0,0,0"/>
                 </StackPanel>
 
-                <!-- Search TextBox -->
-                <TextBox x:Name="SearchBox"
-                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="14" Padding="8,6"
-                         BorderThickness="1" BorderBrush="#FFD1D1D1"
-                         Background="White"
-                         VerticalContentAlignment="Center"/>
+                <!-- Search box (editable combo with history) -->
+                <ComboBox x:Name="SearchBox"
+                          IsEditable="True"
+                          IsTextSearchEnabled="False"
+                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                          ItemsSource="{Binding SearchHistory}"
+                          StaysOpenOnEdit="True"
+                          FontSize="14"
+                          BorderThickness="1" BorderBrush="#FFD1D1D1"
+                          Background="White"
+                          VerticalContentAlignment="Center">
+                    <ComboBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding CommitSearchHistoryCommand}"/>
+                    </ComboBox.InputBindings>
+                </ComboBox>
             </DockPanel>
         </Border>
 
@@ -249,7 +257,13 @@
                       ScrollViewer.CanContentScroll="True"
                       BorderThickness="0"
                       MouseDoubleClick="ResultsListView_MouseDoubleClick"
+                      SelectionChanged="ResultsListView_SelectionChanged"
                       GridViewColumnHeader.Click="GridViewColumnHeader_Click">
+                <ListView.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding OpenFileCommand}"/>
+                    <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyFileCommand}"/>
+                    <KeyBinding Key="C" Modifiers="Control+Shift" Command="{Binding CopyPathCommand}"/>
+                </ListView.InputBindings>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Style.Triggers>
@@ -321,7 +335,8 @@
                         <Separator/>
                         <MenuItem Header="コピー (_Y)" Command="{Binding CopyFileCommand}"
                                   InputGestureText="Ctrl+C"/>
-                        <MenuItem Header="フルパスをコピー (_C)" Command="{Binding CopyPathCommand}"/>
+                        <MenuItem Header="フルパスをコピー (_C)" Command="{Binding CopyPathCommand}"
+                                  InputGestureText="Ctrl+Shift+C"/>
                         <Separator/>
                         <MenuItem Header="プロパティ (_P)" Command="{Binding ShowPropertiesCommand}"/>
                     </ContextMenu>

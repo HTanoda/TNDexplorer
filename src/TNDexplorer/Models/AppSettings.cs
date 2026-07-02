@@ -49,6 +49,9 @@ namespace TNDexplorer.Models
             {
                 RescanMode = RescanMode.Manual;
             }
+
+            if (SearchHistory == null)
+                SearchHistory = new List<string>();
         }
 
         [DataMember]
@@ -142,6 +145,12 @@ namespace TNDexplorer.Models
         /// </summary>
         [DataMember]
         public List<string> ColumnOrder { get; set; }
+
+        /// <summary>
+        /// 検索履歴（MRU、最大20件、先頭が最新）。
+        /// </summary>
+        [DataMember]
+        public List<string> SearchHistory { get; set; } = new List<string>();
     }
 
     [DataContract]

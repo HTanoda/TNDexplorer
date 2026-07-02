@@ -49,6 +49,7 @@ namespace TNDexplorer.ViewModels
         private bool _isIndexing;
         private SearchFilter _currentFilter = SearchFilter.All;
         private FileResultItem _selectedResult;
+        private List<FileResultItem> _selectedResults = new List<FileResultItem>();
         private CancellationTokenSource _searchCts;
         private bool _disposed;
 
@@ -162,6 +163,13 @@ namespace TNDexplorer.ViewModels
                     }
                 }
             }
+        }
+
+        /// <summary>結果一覧の複数選択項目（ビューのSelectionChangedで同期）。</summary>
+        public List<FileResultItem> SelectedResults
+        {
+            get => _selectedResults;
+            set => _selectedResults = value ?? new List<FileResultItem>();
         }
 
         /// <summary>結果一覧の縦スクロール位置を取得する（ビューが設定。ライブ更新時の位置保持用）。</summary>
@@ -297,6 +305,10 @@ namespace TNDexplorer.ViewModels
         public event Action<string> PreviewFileChanged;
         public event Action FileOpening;
 
+        // Search history (MRU)
+        public ObservableCollection<string> SearchHistory { get; }
+            = new ObservableCollection<string>();
+
         // Favorites
         public ObservableCollection<FavoriteFilterItem> FavoriteFilters { get; }
             = new ObservableCollection<FavoriteFilterItem>();
@@ -374,6 +386,7 @@ namespace TNDexplorer.ViewModels
         public RelayCommand OpenHelpCommand { get; }
         public RelayCommand OpenAboutCommand { get; }
         public RelayCommand ExportCsvCommand { get; }
+        public RelayCommand CommitSearchHistoryCommand { get; }
 
         public event Action RequestOpenSettings;
         public event Action RequestOpenHelp;
@@ -387,10 +400,10 @@ namespace TNDexplorer.ViewModels
             _settingsService = settingsService;
             _dispatcher = Application.Current.Dispatcher;
 
-            OpenFileCommand = new RelayCommand(ExecuteOpenFile, () => SelectedResult != null);
+            OpenFileCommand = new RelayCommand(ExecuteOpenFile, () => HasSelection());
             OpenFolderCommand = new RelayCommand(ExecuteOpenFolder, () => SelectedResult != null);
-            CopyPathCommand = new RelayCommand(ExecuteCopyPath, () => SelectedResult != null);
-            CopyFileCommand = new RelayCommand(ExecuteCopyFile, () => SelectedResult != null);
+            CopyPathCommand = new RelayCommand(ExecuteCopyPath, () => HasSelection());
+            CopyFileCommand = new RelayCommand(ExecuteCopyFile, () => HasSelection());
             ShowPropertiesCommand = new RelayCommand(ExecuteShowProperties, () => SelectedResult != null);
             OpenSettingsCommand = new RelayCommand(() => RequestOpenSettings?.Invoke());
             ClearSearchCommand = new RelayCommand(() => SearchText = "");
@@ -402,6 +415,7 @@ namespace TNDexplorer.ViewModels
             OpenHelpCommand = new RelayCommand(() => RequestOpenHelp?.Invoke());
             OpenAboutCommand = new RelayCommand(() => RequestOpenAbout?.Invoke());
             ExportCsvCommand = new RelayCommand(ExecuteExportCsv, () => ResultCount > 0);
+            CommitSearchHistoryCommand = new RelayCommand(CommitSearchHistory);
 
             _indexManager.ProgressChanged += OnIndexingProgress;
 
@@ -441,6 +455,9 @@ namespace TNDexplorer.ViewModels
             // Load favorite filters
             LoadFavorites();
 
+            // Load search history
+            LoadSearchHistory();
+
             // Load display settings
             AlternateRowColors = settings.AlternateRowColors;
             GroupByFiscalYear = settings.GroupByFiscalYear;
@@ -479,6 +496,59 @@ namespace TNDexplorer.ViewModels
             var fresh = _settingsService.Load();
             fresh.FavoriteFilters = favorites;
             _settingsService.Save(fresh);
+        }
+
+        private const int MaxSearchHistory = 20;
+
+        private void LoadSearchHistory()
+        {
+            SearchHistory.Clear();
+            if (_settings.SearchHistory != null)
+            {
+                foreach (var h in _settings.SearchHistory)
+                {
+                    if (SearchHistory.Count >= MaxSearchHistory) break;
+                    if (!string.IsNullOrWhiteSpace(h))
+                        SearchHistory.Add(h);
+                }
+            }
+        }
+
+        private void CommitSearchHistory()
+        {
+            string term = _searchText;
+            if (string.IsNullOrWhiteSpace(term)) return;
+
+            int existing = -1;
+            for (int i = 0; i < SearchHistory.Count; i++)
+            {
+                if (string.Equals(SearchHistory[i], term, StringComparison.Ordinal))
+                {
+                    existing = i;
+                    break;
+                }
+            }
+            if (existing == 0) return; // already newest
+
+            if (existing > 0)
+                SearchHistory.Move(existing, 0);
+            else
+                SearchHistory.Insert(0, term);
+
+            while (SearchHistory.Count > MaxSearchHistory)
+                SearchHistory.RemoveAt(SearchHistory.Count - 1);
+
+            var history = SearchHistory.ToList();
+            _settings.SearchHistory = history;
+            // ファイルから最新設定を読み込み、SearchHistory だけ更新して保存
+            var fresh = _settingsService.Load();
+            fresh.SearchHistory = history;
+            _settingsService.Save(fresh);
+        }
+
+        private bool HasSelection()
+        {
+            return SelectedResult != null || (_selectedResults != null && _selectedResults.Count > 0);
         }
 
         private void AddFavorite()
@@ -887,9 +957,13 @@ namespace TNDexplorer.ViewModels
             int total = _indexManager.Index.TotalCount;
             string mode = _isContentSearch ? "[内容検索] " : "";
 
+            string selectionSuffix = "";
+            if (_selectedResults != null && _selectedResults.Count > 1)
+                selectionSuffix = $" - {_selectedResults.Count:N0} 件選択";
+
             if (!string.IsNullOrWhiteSpace(_searchText) || HasAdvancedFilters())
             {
-                StatusText = $"{mode}{ResultCount:N0} 件ヒット (全 {total:N0} 件中)";
+                StatusText = $"{mode}{ResultCount:N0} 件ヒット (全 {total:N0} 件中){selectionSuffix}";
             }
             else
             {
@@ -897,11 +971,42 @@ namespace TNDexplorer.ViewModels
             }
         }
 
+        /// <summary>複数選択の変更をステータスバーへ反映する（ビューのSelectionChangedから呼ぶ）。</summary>
+        public void OnSelectionChanged()
+        {
+            UpdateStatusText();
+        }
+
+        private List<FileResultItem> GetSelectionForActions()
+        {
+            if (_selectedResults != null && _selectedResults.Count > 1)
+                return _selectedResults;
+            if (SelectedResult != null)
+                return new List<FileResultItem> { SelectedResult };
+            if (_selectedResults != null && _selectedResults.Count == 1)
+                return new List<FileResultItem>(_selectedResults);
+            return new List<FileResultItem>();
+        }
+
         private void ExecuteOpenFile()
         {
-            if (SelectedResult == null) return;
+            var selection = GetSelectionForActions();
+            if (selection.Count == 0) return;
+
+            if (selection.Count >= 6)
+            {
+                var confirm = System.Windows.MessageBox.Show(
+                    $"{selection.Count} 件のファイルを開きます。よろしいですか？",
+                    "複数ファイルを開く",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question);
+                if (confirm != System.Windows.MessageBoxResult.Yes) return;
+            }
+
+            CommitSearchHistory();
             FileOpening?.Invoke();
-            _fileOps.OpenFile(SelectedResult.FullPath);
+            foreach (var item in selection)
+                _fileOps.OpenFile(item.FullPath);
         }
 
         private void ExecuteOpenFolder()
@@ -912,14 +1017,16 @@ namespace TNDexplorer.ViewModels
 
         private void ExecuteCopyPath()
         {
-            if (SelectedResult == null) return;
-            _fileOps.CopyPathToClipboard(SelectedResult.FullPath);
+            var selection = GetSelectionForActions();
+            if (selection.Count == 0) return;
+            _fileOps.CopyPathToClipboard(selection.Select(i => i.FullPath).ToList());
         }
 
         private void ExecuteCopyFile()
         {
-            if (SelectedResult == null) return;
-            _fileOps.CopyFileToClipboard(SelectedResult.FullPath);
+            var selection = GetSelectionForActions();
+            if (selection.Count == 0) return;
+            _fileOps.CopyFileToClipboard(selection.Select(i => i.FullPath).ToList());
         }
 
         private void ExecuteShowProperties()

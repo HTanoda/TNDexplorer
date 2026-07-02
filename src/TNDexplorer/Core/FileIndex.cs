@@ -174,6 +174,12 @@ namespace TNDexplorer.Core
             }
         }
 
+        public bool TryGetEntry(byte driveIndex, ulong fileReferenceNumber, out FileEntry entry)
+        {
+            ulong key = MakeKey(driveIndex, fileReferenceNumber);
+            return _frnLookup.TryGetValue(key, out entry);
+        }
+
         public void UpdateEntry(byte driveIndex, ulong fileReferenceNumber, FileEntry updated)
         {
             ulong key = MakeKey(driveIndex, fileReferenceNumber);
@@ -215,8 +221,15 @@ namespace TNDexplorer.Core
 
             var results = new ConcurrentBag<FileEntry>();
             int resultCount = 0; // Atomic counter (Interlocked) to avoid O(n) ConcurrentBag.Count
-            int currentCount = _count;
-            var localEntries = _entries;
+
+            int currentCount;
+            FileEntry[] localEntries;
+            lock (_lock)
+            {
+                currentCount = _count;
+                localEntries = _entries;
+            }
+            currentCount = Math.Min(currentCount, localEntries.Length);
 
             var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 

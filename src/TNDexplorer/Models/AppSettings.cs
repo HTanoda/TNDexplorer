@@ -37,6 +37,7 @@ namespace TNDexplorer.Models
             DailyRescanHour = 12;
             DailyRescanMinute = 30;
             Theme = "Light";
+            SearchHistoryEnabled = true;
         }
 
         [OnDeserialized]
@@ -155,6 +156,12 @@ namespace TNDexplorer.Models
         /// </summary>
         [DataMember]
         public List<string> SearchHistory { get; set; } = new List<string>();
+
+        /// <summary>
+        /// 検索履歴の記録を有効にするか（既定true）。
+        /// </summary>
+        [DataMember]
+        public bool SearchHistoryEnabled { get; set; } = true;
 
         /// <summary>
         /// アプリのテーマ。"Light"（既定）または "Dark"。

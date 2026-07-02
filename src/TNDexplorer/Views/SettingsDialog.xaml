@@ -37,6 +37,18 @@
                                       Content="年度でグループ化"
                                       ToolTip="更新日時の年度（4月〜翌3月）ごとにラインを表示します"/>
                         </StackPanel>
+
+                        <TextBlock Text="検索履歴"
+                                   FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <StackPanel Margin="5,0,0,15">
+                            <CheckBox IsChecked="{Binding SearchHistoryEnabled}" Margin="0,3"
+                                      Content="検索履歴を有効にする"
+                                      ToolTip="検索ボックスで確定した検索語を履歴として記録します"/>
+                            <Button Content="履歴削除" Padding="12,4" FontSize="12"
+                                    Margin="0,6,0,0" HorizontalAlignment="Left"
+                                    Style="{StaticResource ChipButton}"
+                                    Command="{Binding ClearSearchHistoryCommand}"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

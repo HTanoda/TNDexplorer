@@ -517,7 +517,7 @@ namespace TNDexplorer.Core
                 SaveCacheWithRetry(driveLetter, entries);
 
                 RaiseProgress(
-                    $"{rootPath} 完了 ({entries.Count:N0} 件)",
+                    $"{rootPath} 完了 ({entries.Count:N0} 件){FormatScanErrorSuffix(rootPath, scanner.ErrorCount)}",
                     _index.TotalCount,
                     IndexingState.Indexing);
             }
@@ -652,7 +652,7 @@ namespace TNDexplorer.Core
                 SaveCacheWithRetry(cacheKey, entries);
 
                 RaiseProgress(
-                    $"{rootPath} 完了 ({entries.Count:N0} 件)",
+                    $"{rootPath} 完了 ({entries.Count:N0} 件){FormatScanErrorSuffix(rootPath, scanner.ErrorCount)}",
                     _index.TotalCount,
                     IndexingState.Indexing);
             }
@@ -907,6 +907,13 @@ namespace TNDexplorer.Core
                 System.Diagnostics.Debug.WriteLine($"Failed to initialize TextExtractor: {ex.Message}");
                 _textExtractor = null;
             }
+        }
+
+        private static string FormatScanErrorSuffix(string target, int errorCount)
+        {
+            if (errorCount <= 0) return "";
+            TNDexplorer.Services.AppLog.Warn("NetworkScan", $"{target}: アクセスできない項目 {errorCount}件");
+            return $"（アクセスできない項目 {errorCount}件）";
         }
 
         private void RaiseProgress(string message, int totalEntries, IndexingState state)

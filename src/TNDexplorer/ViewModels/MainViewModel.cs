@@ -728,7 +728,8 @@ namespace TNDexplorer.ViewModels
                         _dispatcher.BeginInvoke(new Action(() =>
                         {
                             if (p.IsCompleted)
-                                FullTextStatus = $"内容検索完了: {p.TotalFiles:N0} 件スキャン、{p.MatchedFiles:N0} 件ヒット";
+                                FullTextStatus = $"内容検索完了: {p.TotalFiles:N0} 件スキャン、{p.MatchedFiles:N0} 件ヒット"
+                                    + (p.FailedFiles > 0 ? $"（読み取り失敗 {p.FailedFiles:N0} 件）" : "");
                             else
                                 FullTextStatus = $"内容検索: {p.ScannedFiles:N0}/{p.TotalFiles:N0} 件スキャン中... ({p.MatchedFiles:N0} 件ヒット)";
                         }));

@@ -49,6 +49,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("SettingsService", "設定ファイルの隔離に失敗しました", ex);
                 System.Diagnostics.Debug.WriteLine($"Failed to quarantine corrupt settings: {ex.Message}");
             }
         }
@@ -95,6 +96,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("SettingsService", "設定の保存に失敗しました", ex);
                 System.Diagnostics.Debug.WriteLine($"Failed to save settings: {ex.Message}");
             }
         }

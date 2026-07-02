@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using TNDexplorer.Services;
 
 namespace TNDexplorer.Core
 {
@@ -14,6 +15,13 @@ namespace TNDexplorer.Core
 
     public class NetworkDriveScanner
     {
+        private const int MaxErrorLogEntries = 20;
+
+        /// <summary>
+        /// 直近の ScanDrive 呼び出しでアクセスできなかった項目の件数。
+        /// </summary>
+        public int ErrorCount { get; private set; }
+
         public List<FileEntry> ScanDrive(
             string rootPath,
             byte driveIndex,
@@ -23,6 +31,7 @@ namespace TNDexplorer.Core
         {
             var entries = new List<FileEntry>();
             ulong frnCounter = 0; // Generate pseudo-FRNs for network entries
+            ErrorCount = 0;
 
             ScanDirectory(rootPath, driveIndex, excludePatterns, entries, ref frnCounter, 0, ct, progress);
 
@@ -126,9 +135,16 @@ namespace TNDexplorer.Core
                     }
                 }
             }
-            catch (UnauthorizedAccessException) { }
-            catch (DirectoryNotFoundException) { }
-            catch (IOException) { }
+            catch (UnauthorizedAccessException ex) { RecordScanError(path, ex); }
+            catch (DirectoryNotFoundException ex) { RecordScanError(path, ex); }
+            catch (IOException ex) { RecordScanError(path, ex); }
+        }
+
+        private void RecordScanError(string path, Exception ex)
+        {
+            ErrorCount++;
+            if (ErrorCount <= MaxErrorLogEntries)
+                AppLog.Warn("NetworkScan", $"{path}: {ex.GetType().Name}");
         }
 
         private static bool ShouldExclude(string name, IReadOnlyList<string> patterns)

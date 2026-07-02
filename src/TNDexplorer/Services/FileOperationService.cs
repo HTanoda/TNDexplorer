@@ -23,6 +23,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"ファイルを開けませんでした: {fullPath}", ex);
                 MessageBox.Show($"ファイルを開けませんでした:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -49,6 +50,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"フォルダを開けませんでした: {fullPath}", ex);
                 MessageBox.Show($"フォルダを開けませんでした:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -226,6 +228,7 @@ namespace TNDexplorer.Services
                 }
                 catch (Exception ex)
                 {
+                    AppLog.Error("FileOperation", errorTitle, ex);
                     MessageBox.Show($"{errorTitle}:\n{ex.Message}",
                         "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
@@ -260,6 +263,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"CSVファイルの保存に失敗しました: {filePath}", ex);
                 MessageBox.Show($"CSVファイルの保存に失敗しました:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -302,6 +306,7 @@ namespace TNDexplorer.Services
             }
             catch (Exception ex)
             {
+                AppLog.Error("FileOperation", $"プロパティの表示に失敗しました: {fullPath}", ex);
                 MessageBox.Show($"プロパティの表示に失敗しました:\n{ex.Message}",
                     "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }

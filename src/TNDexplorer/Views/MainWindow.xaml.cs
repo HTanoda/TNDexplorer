@@ -877,6 +877,8 @@ namespace TNDexplorer.Views
             }
             catch { }
 
+            try { TNDexplorer.Services.AppLog.Info("App", "アプリ終了"); } catch { }
+
             // Immediate process termination via TerminateProcess.
             // Unlike Environment.Exit(0), this does NOT run CLR shutdown or COM finalizers,
             // so it cannot deadlock on STA/MTA cross-apartment COM release.

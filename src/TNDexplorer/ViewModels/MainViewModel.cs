@@ -84,6 +84,7 @@ namespace TNDexplorer.ViewModels
         private DispatcherTimer _debounceTimer;
         private DispatcherTimer _favStatusTimer;
         private DispatcherTimer _autoRefreshTimer;
+        private DispatcherTimer _historyTimer;
         // ライブ更新の再描画中はプレビュー再ロードを抑止する（同一ファイル再選択によるちらつき防止）
         private bool _suppressPreviewUpdate;
 
@@ -93,7 +94,10 @@ namespace TNDexplorer.ViewModels
             set
             {
                 if (SetProperty(ref _searchText, value))
+                {
                     ScheduleSearch();
+                    RestartHistoryTimer();
+                }
             }
         }
 
@@ -454,6 +458,18 @@ namespace TNDexplorer.ViewModels
                 _ = ExecuteSearchAsync(preserveView: true);
             };
 
+            // 入力が3秒止まり、結果が出ていれば検索履歴に自動記録
+            _historyTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(3)
+            };
+            _historyTimer.Tick += (s, e) =>
+            {
+                _historyTimer.Stop();
+                if (!string.IsNullOrWhiteSpace(_searchText) && ResultCount > 0)
+                    CommitSearchHistory();
+            };
+
             _favStatusTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(2)
@@ -674,6 +690,14 @@ namespace TNDexplorer.ViewModels
         {
             _debounceTimer.Stop();
             _debounceTimer.Start();
+        }
+
+        private void RestartHistoryTimer()
+        {
+            if (_historyTimer == null) return;
+            _historyTimer.Stop();
+            if (!string.IsNullOrWhiteSpace(_searchText))
+                _historyTimer.Start();
         }
 
         private AdvancedSearchOptions BuildAdvancedOptions()
@@ -1116,6 +1140,7 @@ namespace TNDexplorer.ViewModels
                 _debounceTimer?.Stop();
                 _autoRefreshTimer?.Stop();
                 _favStatusTimer?.Stop();
+                _historyTimer?.Stop();
                 _disposed = true;
             }
         }

@@ -36,6 +36,7 @@ namespace TNDexplorer.Models
             NetworkChangeMonitorEnabled = false;
             DailyRescanHour = 12;
             DailyRescanMinute = 30;
+            Theme = "Light";
         }
 
         [OnDeserialized]
@@ -52,6 +53,9 @@ namespace TNDexplorer.Models
 
             if (SearchHistory == null)
                 SearchHistory = new List<string>();
+
+            if (string.IsNullOrEmpty(Theme))
+                Theme = "Light";
         }
 
         [DataMember]
@@ -151,6 +155,12 @@ namespace TNDexplorer.Models
         /// </summary>
         [DataMember]
         public List<string> SearchHistory { get; set; } = new List<string>();
+
+        /// <summary>
+        /// アプリのテーマ。"Light"（既定）または "Dark"。
+        /// </summary>
+        [DataMember]
+        public string Theme { get; set; } = "Light";
     }
 
     [DataContract]

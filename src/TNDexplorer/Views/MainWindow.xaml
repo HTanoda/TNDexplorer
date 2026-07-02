@@ -69,6 +69,18 @@
                     </ToggleButton>
                     <Button Command="{Binding ExportCsvCommand}" Style="{StaticResource IconButton}"
                             Content="&#xE896;" ToolTip="CSV出力"/>
+                    <Button Command="{Binding ToggleThemeCommand}" ToolTip="テーマ切替">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                <Setter Property="Content" Value="&#xE708;"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDarkTheme}" Value="True">
+                                        <Setter Property="Content" Value="&#xE706;"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button Command="{Binding OpenSettingsCommand}" Style="{StaticResource IconButton}"
                             Content="&#xE713;" ToolTip="設定"/>
                     <Menu Background="Transparent" VerticalAlignment="Center" Margin="0,0,0,0">

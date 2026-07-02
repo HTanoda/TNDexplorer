@@ -387,6 +387,14 @@ namespace TNDexplorer.ViewModels
         public RelayCommand OpenAboutCommand { get; }
         public RelayCommand ExportCsvCommand { get; }
         public RelayCommand CommitSearchHistoryCommand { get; }
+        public RelayCommand ToggleThemeCommand { get; }
+
+        private bool _isDarkTheme;
+        public bool IsDarkTheme
+        {
+            get => _isDarkTheme;
+            set => SetProperty(ref _isDarkTheme, value);
+        }
 
         public event Action RequestOpenSettings;
         public event Action RequestOpenHelp;
@@ -416,6 +424,10 @@ namespace TNDexplorer.ViewModels
             OpenAboutCommand = new RelayCommand(() => RequestOpenAbout?.Invoke());
             ExportCsvCommand = new RelayCommand(ExecuteExportCsv, () => ResultCount > 0);
             CommitSearchHistoryCommand = new RelayCommand(CommitSearchHistory);
+            ToggleThemeCommand = new RelayCommand(ToggleTheme);
+
+            _isDarkTheme = string.Equals(
+                ThemeManager.Normalize(settings.Theme), ThemeManager.Dark, StringComparison.Ordinal);
 
             _indexManager.ProgressChanged += OnIndexingProgress;
 
@@ -543,6 +555,19 @@ namespace TNDexplorer.ViewModels
             // ファイルから最新設定を読み込み、SearchHistory だけ更新して保存
             var fresh = _settingsService.Load();
             fresh.SearchHistory = history;
+            _settingsService.Save(fresh);
+        }
+
+        private void ToggleTheme()
+        {
+            string newTheme = IsDarkTheme ? ThemeManager.Light : ThemeManager.Dark;
+            ThemeManager.Apply(newTheme);
+            IsDarkTheme = string.Equals(newTheme, ThemeManager.Dark, StringComparison.Ordinal);
+
+            // read-modify-write: ファイルから最新設定を読み込み、Theme だけ更新して保存
+            _settings.Theme = newTheme;
+            var fresh = _settingsService.Load();
+            fresh.Theme = newTheme;
             _settingsService.Save(fresh);
         }
 

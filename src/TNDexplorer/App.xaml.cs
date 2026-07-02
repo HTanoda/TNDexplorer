@@ -54,6 +54,9 @@ namespace TNDexplorer
             var settingsService = new SettingsService();
             var settings = settingsService.Load();
 
+            // Apply saved theme before any window is created (idempotent).
+            ThemeManager.Apply(settings.Theme);
+
             // First run: show setup wizard
             if (settings.IsFirstRun)
             {

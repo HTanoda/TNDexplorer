@@ -39,6 +39,7 @@ namespace TNDexplorer.Views
         public MainWindow()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => Services.ThemeManager.ApplyToWindow(this);
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing;
             SizeChanged += MainWindow_SizeChanged;

@@ -1,5 +1,7 @@
 using System;
 using System.Windows;
+using System.Windows.Interop;
+using TNDexplorer.Native;
 
 namespace TNDexplorer.Services
 {
@@ -62,6 +64,71 @@ namespace TNDexplorer.Services
             else
             {
                 dictionaries.Insert(0, newTheme);
+            }
+
+            // タイトルバーの暗色/明色を全ウィンドウへ即時反映
+            _isDark = theme == Dark;
+            foreach (Window w in app.Windows)
+            {
+                ApplyToWindow(w);
+            }
+        }
+
+        private static bool _isDark;
+
+        /// <summary>
+        /// ウィンドウのタイトルバーを現在のテーマに合わせて暗色/明色化する (DWM)。
+        /// ハンドル未生成時は SourceInitialized で自動的に再適用する。
+        /// </summary>
+        public static void ApplyToWindow(Window window)
+        {
+            if (window == null) return;
+
+            var helper = new WindowInteropHelper(window);
+            IntPtr hwnd = helper.Handle;
+
+            if (hwnd == IntPtr.Zero)
+            {
+                // ハンドル未生成: 生成後に一度だけ適用
+                EventHandler handler = null;
+                handler = (s, e) =>
+                {
+                    window.SourceInitialized -= handler;
+                    ApplyDwmDarkMode(new WindowInteropHelper(window).Handle);
+                };
+                window.SourceInitialized += handler;
+                return;
+            }
+
+            ApplyDwmDarkMode(hwnd);
+        }
+
+        private static void ApplyDwmDarkMode(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return;
+
+            int useDark = _isDark ? 1 : 0;
+            try
+            {
+                int hr = NativeMethods.DwmSetWindowAttribute(
+                    hwnd,
+                    NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    ref useDark,
+                    sizeof(int));
+
+                if (hr != 0)
+                {
+                    // 旧ビルド (Win10 1809〜1903) は属性 ID 19
+                    NativeMethods.DwmSetWindowAttribute(
+                        hwnd,
+                        NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1,
+                        ref useDark,
+                        sizeof(int));
+                }
+            }
+            catch
+            {
+                // DWM 未対応環境は無視
             }
         }
 

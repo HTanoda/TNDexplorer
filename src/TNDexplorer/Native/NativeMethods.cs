@@ -94,5 +94,17 @@ namespace TNDexplorer.Native
         internal const uint CF_HDROP = 15;
         internal const uint GMEM_MOVEABLE = 0x0002;
         internal const uint GMEM_ZEROINIT = 0x0040;
+
+        // DWM: immersive dark mode for the window title bar (Win10 1809+ / Win11)
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        internal static extern int DwmSetWindowAttribute(
+            IntPtr hwnd,
+            int dwAttribute,
+            ref int pvAttribute,
+            int cbAttribute);
+
+        // Attribute id changed between builds: 19 (pre-20H1) and 20 (20H1+).
+        internal const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        internal const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
     }
 }

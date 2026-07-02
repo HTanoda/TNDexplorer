@@ -8,6 +8,7 @@ namespace TNDexplorer.Views
         public SetupWizardDialog()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => Services.ThemeManager.ApplyToWindow(this);
         }
 
         private void OnStartClick(object sender, RoutedEventArgs e)

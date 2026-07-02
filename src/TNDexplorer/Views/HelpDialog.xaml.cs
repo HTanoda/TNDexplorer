@@ -7,6 +7,7 @@ namespace TNDexplorer.Views
         public HelpDialog()
         {
             InitializeComponent();
+            SourceInitialized += (s, e) => Services.ThemeManager.ApplyToWindow(this);
         }
 
         private void OnCloseClick(object sender, RoutedEventArgs e)

@@ -6,7 +6,10 @@
         Width="600" Height="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Background="{DynamicResource App.WindowBg}"
+        Foreground="{DynamicResource App.TextPrimary}"
+        TextElement.Foreground="{DynamicResource App.TextPrimary}">
 
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -51,7 +54,7 @@
                                     <CheckBox IsChecked="{Binding IsSelected}" Margin="5,3">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" Width="200"/>
-                                            <TextBlock Text="{Binding SizeInfo}" Foreground="Gray" Margin="10,0,0,0"/>
+                                            <TextBlock Text="{Binding SizeInfo}" Foreground="{DynamicResource App.TextSecondary}" Margin="10,0,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </DataTemplate>
@@ -62,10 +65,10 @@
                         <TextBlock Text="フォルダ"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
                         <TextBlock Text="手動で走査対象のフォルダを追加できます。" FontSize="11"
-                                   Foreground="Gray" Margin="0,0,0,5"/>
+                                   Foreground="{DynamicResource App.TextSecondary}" Margin="0,0,0,5"/>
                         <ListBox x:Name="CustomFoldersList"
                                  ItemsSource="{Binding CustomFolders}" Margin="0,0,0,5"
-                                 MaxHeight="120" BorderThickness="1" BorderBrush="#FFD1D1D1"
+                                 MaxHeight="120" BorderThickness="1" BorderBrush="{DynamicResource App.Border}"
                                  SelectionMode="Extended">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
@@ -100,7 +103,7 @@
                         <TextBlock Text="リスキャン設定"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
                         <TextBlock Text="ネットワークドライブ・カスタムフォルダのインデックスを更新するタイミングを設定します。"
-                                   FontSize="11" Foreground="Gray" Margin="0,0,0,5"/>
+                                   FontSize="11" Foreground="{DynamicResource App.TextSecondary}" Margin="0,0,0,5"/>
                         <StackPanel Margin="5,0,0,10">
                             <RadioButton Content="1日1回（スケジュール）"
                                          IsChecked="{Binding RescanModeIndex, Converter={StaticResource IntToBool}, ConverterParameter=0}"
@@ -127,7 +130,7 @@
                                 <TextBlock Text="間隔:" VerticalAlignment="Center"/>
                                 <TextBox Text="{Binding NetworkRescanIntervalMinutes}" Width="60" Margin="8,0,0,0"/>
                                 <TextBlock Text="分（最小180分）" VerticalAlignment="Center" Margin="4,0,0,0"
-                                           Foreground="Gray" FontSize="11"/>
+                                           Foreground="{DynamicResource App.TextSecondary}" FontSize="11"/>
                             </StackPanel>
                         </StackPanel>
 
@@ -144,14 +147,15 @@
                                   IsEnabled="{Binding IsAdvancedEnabled}"
                                   Margin="5,0,0,4"/>
                         <TextBlock Text="ファイルサーバーへ常時の変更通知購読を行います。変更はアプリの再起動後に反映されます。"
-                                   TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="20,2,0,10"/>
+                                   TextWrapping="Wrap" Foreground="{DynamicResource App.TextSecondary}" FontSize="11" Margin="20,2,0,10"/>
 
                         <!-- Advanced settings toggle button -->
                         <Button Content="{Binding AdvancedToggleButtonText}"
                                 Padding="12,4" FontSize="12"
                                 Margin="5,0,0,10" HorizontalAlignment="Left"
                                 Click="OnToggleAdvancedSettings"
-                                Background="Transparent" BorderThickness="1" BorderBrush="#FF999999"
+                                Background="Transparent" BorderThickness="1" BorderBrush="{DynamicResource App.Border}"
+                                Foreground="{DynamicResource App.TextPrimary}"
                                 Cursor="Hand"/>
 
                         <!-- Manual rescan buttons -->
@@ -196,7 +200,7 @@
                               SelectionMode="Extended"
                               x:Name="FavoritesListView"
                               SelectionChanged="OnFavoritesSelectionChanged"
-                              BorderThickness="1" BorderBrush="#FFD1D1D1">
+                              BorderThickness="1" BorderBrush="{DynamicResource App.Border}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="名前" Width="150"
@@ -222,7 +226,7 @@
                                 Background="#FFDC3545" Foreground="White" BorderThickness="0"
                                 Cursor="Hand"/>
                         <TextBlock Text="(複数選択: Ctrl+クリック / Shift+クリック)"
-                                   Foreground="Gray" FontSize="11" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource App.TextSecondary}" FontSize="11" VerticalAlignment="Center"
                                    Margin="10,0,0,0"/>
                     </StackPanel>
 
@@ -254,6 +258,7 @@
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="フォルダ:" VerticalAlignment="Center" Margin="0,0,8,4"/>
                             <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,4">
                                 <Button DockPanel.Dock="Right" Content="..." Padding="6,3" Margin="4,0,0,0"
+                                        Style="{StaticResource ChipButton}"
                                         Click="OnBrowseNewFavFolder" Cursor="Hand"/>
                                 <TextBox Text="{Binding NewSettingsFavFolder, UpdateSourceTrigger=PropertyChanged}"
                                          Padding="4,3"/>
@@ -273,7 +278,8 @@
                                         Padding="10,4" FontSize="12" Margin="8,0,0,0"
                                         Click="OnCancelEditFavorite"
                                         Visibility="{Binding IsEditingFavorite, Converter={StaticResource BoolToVisibility}}"
-                                        Background="Transparent" BorderThickness="1" BorderBrush="#FFD1D1D1"
+                                        Background="Transparent" BorderThickness="1" BorderBrush="{DynamicResource App.Border}"
+                                        Foreground="{DynamicResource App.TextPrimary}"
                                         Cursor="Hand"/>
                             </StackPanel>
                         </Grid>
@@ -288,14 +294,14 @@
                         <!-- Description -->
                         <TextBlock Text="内容検索（grep方式）"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                        <TextBlock FontSize="12" Foreground="#FF333333" Margin="5,0,0,12" TextWrapping="Wrap"
+                        <TextBlock FontSize="12" Foreground="{DynamicResource App.TextPrimary}" Margin="5,0,0,12" TextWrapping="Wrap"
                                    Text="検索実行時にファイル内容を直接読み取ります。"/>
 
                         <!-- Target Extensions -->
                         <TextBlock Text="対象拡張子"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
                         <TextBlock Text="セミコロン（;）区切りで対象拡張子を指定します。"
-                                   FontSize="11" Foreground="Gray" Margin="0,0,0,3"/>
+                                   FontSize="11" Foreground="{DynamicResource App.TextSecondary}" Margin="0,0,0,3"/>
                         <TextBox Text="{Binding FullTextTargetExtensionsText, UpdateSourceTrigger=PropertyChanged}"
                                  FontSize="12" Padding="4,3"
                                  AcceptsReturn="False" TextWrapping="Wrap"
@@ -310,7 +316,7 @@
                                      FontSize="12" Padding="4,3"/>
                             <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0"/>
                             <TextBlock Text="(0 = 無制限、この値を超えるファイルはスキップされます)"
-                                       FontSize="11" Foreground="Gray" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                       FontSize="11" Foreground="{DynamicResource App.TextSecondary}" VerticalAlignment="Center" Margin="10,0,0,0"/>
                         </StackPanel>
 
                         <!-- Include filename search -->
@@ -322,7 +328,7 @@
                                   ToolTip="ONの場合、内容検索時にファイル名の検索結果も合わせて表示します"/>
 
                         <!-- Notes -->
-                        <TextBlock FontSize="11" Foreground="Gray" Margin="0,15,0,0" TextWrapping="Wrap">
+                        <TextBlock FontSize="11" Foreground="{DynamicResource App.TextSecondary}" Margin="0,15,0,0" TextWrapping="Wrap">
                             <Run Text="使い方:"/>
                             <LineBreak/>
                             <Run Text="1. メイン画面で「内容検索」ボタンをONにする"/>
@@ -352,6 +358,7 @@
                     Click="OnSaveClick" IsDefault="True"
                     Background="#FF0078D4" Foreground="White" FontWeight="SemiBold"/>
             <Button Content="キャンセル" Width="80" Height="30"
+                    Style="{StaticResource ChipButton}"
                     Click="OnCancelClick" Margin="10,0,0,0" IsCancel="True"/>
         </StackPanel>
     </Grid>

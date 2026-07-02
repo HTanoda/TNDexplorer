@@ -201,6 +201,31 @@
                               x:Name="FavoritesListView"
                               SelectionChanged="OnFavoritesSelectionChanged"
                               BorderThickness="1" BorderBrush="{DynamicResource App.Border}">
+                        <ListView.ItemContainerStyle>
+                            <!-- 標準テンプレートは白系ハイライト固定のためテーマ追従の自前テンプレートに置換 -->
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Foreground" Value="{DynamicResource App.TextPrimary}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListViewItem">
+                                            <Border x:Name="Bd" Background="Transparent"
+                                                    Padding="2" SnapsToDevicePixels="True">
+                                                <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                                      Columns="{TemplateBinding GridView.ColumnCollection}"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource App.Hover}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource App.Selection}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="名前" Width="150"

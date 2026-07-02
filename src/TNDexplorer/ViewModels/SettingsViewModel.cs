@@ -84,6 +84,14 @@ namespace TNDexplorer.ViewModels
         private SettingsFavoriteItem _editingFavoriteItem;
         private string _favRegisterButtonText = "登録";
 
+        // Snapshot of restart-requiring settings captured at load time
+        private string _restartSnapshot;
+
+        /// <summary>
+        /// True when a setting that only takes effect on startup was changed by this Save.
+        /// </summary>
+        public bool RequiresRestart { get; private set; }
+
         public ObservableCollection<DriveSelectionItem> LocalDrives { get; }
             = new ObservableCollection<DriveSelectionItem>();
 
@@ -331,6 +339,38 @@ namespace TNDexplorer.ViewModels
             RefreshDrives();
             LoadFavorites();
             LoadCustomFolders();
+
+            _restartSnapshot = BuildRestartSnapshot();
+        }
+
+        /// <summary>
+        /// Builds a normalized string of settings that only take effect on startup:
+        /// local drive selection, custom folders (path+enabled, order-independent),
+        /// hidden/system file scan scope, rescan schedule, and network change monitoring.
+        /// </summary>
+        private string BuildRestartSnapshot()
+        {
+            var drives = string.Join(",", LocalDrives
+                .OrderBy(d => d.DriveLetter, StringComparer.OrdinalIgnoreCase)
+                .Select(d => d.DriveLetter + "=" + d.IsSelected));
+
+            var folders = string.Join(",", CustomFolders
+                .Select(f => (f.FolderPath ?? "") + "=" + f.IsSelected)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase));
+
+            bool monitor = IsAdvancedEnabled && NetworkChangeMonitorEnabled;
+
+            return string.Join("|",
+                drives,
+                folders,
+                "hidden=" + IncludeHiddenSystemFiles,
+                "advanced=" + IsAdvancedEnabled,
+                "mode=" + RescanModeIndex,
+                "hour=" + DailyRescanHour,
+                "minute=" + DailyRescanMinute,
+                "interval=" + NetworkRescanIntervalMinutes,
+                "monitor=" + monitor,
+                "max=" + MaxSearchResults);
         }
 
         private void LoadCustomFolders()
@@ -602,6 +642,10 @@ namespace TNDexplorer.ViewModels
             // 検索履歴はメイン画面と履歴削除が随時保存するため、古いリストで上書きしないよう最新を引き継ぐ
             _settings.SearchHistory = _settingsService.Load().SearchHistory;
             _settingsService.Save(_settings);
+
+            var newSnapshot = BuildRestartSnapshot();
+            RequiresRestart = !string.Equals(newSnapshot, _restartSnapshot, StringComparison.Ordinal);
+            _restartSnapshot = newSnapshot;
         }
 
         private void ClearSearchHistory()

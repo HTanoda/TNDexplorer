@@ -97,16 +97,19 @@ namespace TNDexplorer
                     // Reload favorites in main VM (no restart needed for favorites-only changes)
                     mainVm.ReloadFavorites();
 
-                    // Settings changed - restart the application for drive changes
-                    var restartResult = MessageBox.Show(
-                        "設定が保存されました。ドライブ設定の変更を適用するにはアプリケーションの再起動が必要です。\n\n今すぐ再起動しますか?",
-                        "設定変更",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (restartResult == MessageBoxResult.Yes)
+                    // Only prompt for restart when a startup-only setting actually changed
+                    if (settingsVm.RequiresRestart)
                     {
-                        RestartApp();
+                        var restartResult = MessageBox.Show(
+                            "設定が保存されました。ドライブ設定の変更を適用するにはアプリケーションの再起動が必要です。\n\n今すぐ再起動しますか?",
+                            "設定変更",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+
+                        if (restartResult == MessageBoxResult.Yes)
+                        {
+                            RestartApp();
+                        }
                     }
                 }
             };

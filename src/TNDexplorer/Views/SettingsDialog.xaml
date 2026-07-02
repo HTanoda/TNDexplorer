@@ -40,6 +40,8 @@
 
                         <TextBlock Text="検索履歴"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <TextBlock Text="履歴は、検索ボックスで Enter を押した時、または検索結果のファイルを開いた時に記録されます。"
+                                   FontSize="11" Foreground="{DynamicResource App.TextSecondary}" Margin="0,0,0,5"/>
                         <StackPanel Margin="5,0,0,15">
                             <CheckBox IsChecked="{Binding SearchHistoryEnabled}" Margin="0,3"
                                       Content="検索履歴を有効にする"

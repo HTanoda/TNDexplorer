@@ -66,7 +66,17 @@ namespace TNDexplorer.Core
             {
                 return await Task.Run(() =>
                 {
-                    var entries = _index.Search(query, filter, maxResults, newCts.Token,
+                    // サイズ/日付フィルタは名前マッチ後に適用するため、名前マッチを maxResults で
+                    // 打ち切るとフィルタで弾かれた分だけ結果が不足する。フィルタ有りの場合は
+                    // インデックス側の上限を緩和して候補を広げる（無制限にはしない）。
+                    bool hasPostFilter = advancedOptions != null &&
+                        (advancedOptions.MinSize.HasValue || advancedOptions.MaxSize.HasValue
+                         || advancedOptions.DateFrom.HasValue || advancedOptions.DateTo.HasValue);
+                    int indexLimit = hasPostFilter
+                        ? Math.Max(maxResults * 20, 200_000)
+                        : maxResults;
+
+                    var entries = _index.Search(query, filter, indexLimit, newCts.Token,
                         advancedOptions?.CaseSensitive ?? false,
                         advancedOptions?.ExtensionFilter,
                         advancedOptions?.FolderPath,
@@ -74,10 +84,17 @@ namespace TNDexplorer.Core
                         advancedOptions?.ExcludeHiddenFiles ?? false,
                         advancedOptions?.ExcludeSystemFiles ?? false);
 
+                    // インデックス側が上限で打ち切られた可能性（候補が上限件数に達した）を検知
+                    bool indexTruncated = hasPostFilter && entries.Count >= indexLimit;
+
                     var results = new List<FileResultItem>(Math.Min(entries.Count, maxResults));
                     foreach (var entry in entries)
                     {
                         if (newCts.Token.IsCancellationRequested)
+                            break;
+
+                        // フィルタ通過件数が上限に達したら早期終了
+                        if (results.Count >= maxResults)
                             break;
 
                         string dirPath = _index.ResolvePath(entry);
@@ -137,6 +154,16 @@ namespace TNDexplorer.Core
                             Modified = modified,
                             IsDirectory = entry.IsDirectory,
                         });
+                    }
+
+                    // 緩和後の上限まで走査しても maxResults に満たず、かつインデックス側が
+                    // 上限で打ち切られていた場合は、取りこぼしの可能性を記録する。
+                    if (indexTruncated && results.Count < maxResults)
+                    {
+                        TNDexplorer.Services.AppLog.Warn("Search",
+                            $"サイズ/日付フィルタの候補が上限({indexLimit:N0}件)に達したため、" +
+                            $"一部の該当ファイルが結果に含まれていない可能性があります。" +
+                            $"（表示 {results.Count:N0} 件）");
                     }
 
                     // 並列検索＋ConcurrentBag により結果順序は非決定的。決定的な全順序(FullPath)を

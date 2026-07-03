@@ -87,6 +87,11 @@ namespace TNDexplorer.ViewModels
         // ライブ更新の再描画中はプレビュー再ロードを抑止する（同一ファイル再選択によるちらつき防止）
         private bool _suppressPreviewUpdate;
 
+        // 結果一覧のソート状態（null=ユーザーソートなし。"Name"/"Path"/"Size"/"Modified"/"FullPath"）
+        private string _sortBy;
+        private bool _sortAscending = true;
+        private int _sortRequestId;
+
         public string SearchText
         {
             get => _searchText;
@@ -347,7 +352,25 @@ namespace TNDexplorer.ViewModels
         public bool GroupByFiscalYear
         {
             get => _groupByFiscalYear;
-            set => SetProperty(ref _groupByFiscalYear, value);
+            set
+            {
+                if (SetProperty(ref _groupByFiscalYear, value))
+                    ReapplyOrdering();
+            }
+        }
+
+        /// <summary>結果一覧のソート列。null=ユーザーソートなし。"Name"/"Path"/"Size"/"Modified"/"FullPath"。</summary>
+        public string SortBy
+        {
+            get => _sortBy;
+            private set => SetProperty(ref _sortBy, value);
+        }
+
+        /// <summary>ソート方向。true=昇順、false=降順。</summary>
+        public bool SortAscending
+        {
+            get => _sortAscending;
+            private set => SetProperty(ref _sortAscending, value);
         }
 
         // Content search (grep-style)
@@ -886,12 +909,9 @@ namespace TNDexplorer.ViewModels
 
                 if (!ct.IsCancellationRequested)
                 {
-                    // Sort by Modified descending and mark fiscal year boundaries
-                    if (_groupByFiscalYear && results.Count > 0)
-                    {
-                        results.Sort((a, b) => b.Modified.CompareTo(a.Modified));
-                        MarkFiscalYearBoundaries(results);
-                    }
+                    // ワーカースレッド上で並び順の決定＋年度境界マークを行ってから
+                    // dispatcher へ渡す（UIスレッドでのソートを避けカクつきを防止）。
+                    ApplyOrdering(results);
 
                     // ライブ更新時は選択行(FullPath)と縦スクロール位置を退避して復元する
                     string preservedSelection = null;
@@ -959,6 +979,159 @@ namespace TNDexplorer.ViewModels
                     _autoRefreshTimer.Start();
                 }
             }));
+        }
+
+        /// <summary>
+        /// 結果一覧に列名でユーザーソートを適用する（ワーカースレッドで実行）。
+        /// 現在の Results のコピーをソート＋境界マークして差し替える。連打時は
+        /// 最新要求だけが反映されるよう要求IDで判定する。
+        /// </summary>
+        public void SetSort(string sortBy, bool ascending)
+        {
+            SortBy = string.IsNullOrEmpty(sortBy) ? null : sortBy;
+            SortAscending = ascending;
+
+            int requestId = Interlocked.Increment(ref _sortRequestId);
+            var snapshot = new List<FileResultItem>(_results);
+
+            Task.Run(() =>
+            {
+                ApplyOrdering(snapshot);
+                _dispatcher.BeginInvoke(new Action(() =>
+                {
+                    // 連打時は最新要求のみ反映（古い結果は破棄）
+                    if (requestId != Volatile.Read(ref _sortRequestId)) return;
+
+                    string preservedSelection = SelectedResult?.FullPath;
+                    double preservedOffset = GetResultsScrollOffset?.Invoke() ?? 0;
+
+                    _suppressPreviewUpdate = true;
+                    try
+                    {
+                        Results = snapshot;
+
+                        if (!string.IsNullOrEmpty(preservedSelection))
+                        {
+                            FileResultItem match = null;
+                            for (int i = 0; i < snapshot.Count; i++)
+                            {
+                                if (string.Equals(snapshot[i].FullPath, preservedSelection, StringComparison.OrdinalIgnoreCase))
+                                { match = snapshot[i]; break; }
+                            }
+                            if (match != null) SelectedResult = match;
+                        }
+                        _dispatcher.BeginInvoke(
+                            new Action(() => SetResultsScrollOffset?.Invoke(preservedOffset)),
+                            DispatcherPriority.Background);
+                    }
+                    finally
+                    {
+                        _suppressPreviewUpdate = false;
+                    }
+                }));
+            });
+        }
+
+        /// <summary>
+        /// 設定変更（GroupByFiscalYear 等）で並び順の前提が変わった際に、
+        /// 現在の Results へ決定ルールを再適用する。ユーザーソート状態は維持する。
+        /// </summary>
+        private void ReapplyOrdering()
+        {
+            if (_results == null || _results.Count == 0) return;
+            SetSort(_sortBy, _sortAscending);
+        }
+
+        /// <summary>
+        /// 並び順の決定ルールを1箇所に集約:
+        ///   SortBy が非null → ユーザーソート。
+        ///   SortBy が null かつ GroupByFiscalYear → Modified 降順（従来挙動）。
+        ///   どちらでもなければ SearchEngine が返した順（FullPath昇順）のまま。
+        /// 最終的な並び順が「Modified 降順」の場合のみ年度境界をマークし、
+        /// それ以外は境界情報をクリアする（表示の不整合を解消）。
+        /// </summary>
+        private void ApplyOrdering(List<FileResultItem> items)
+        {
+            if (items == null || items.Count == 0) return;
+
+            bool isModifiedDescending;
+            if (!string.IsNullOrEmpty(_sortBy))
+            {
+                items.Sort(GetComparison(_sortBy, _sortAscending));
+                isModifiedDescending = string.Equals(_sortBy, "Modified", StringComparison.Ordinal) && !_sortAscending;
+            }
+            else if (_groupByFiscalYear)
+            {
+                items.Sort(GetComparison("Modified", false));
+                isModifiedDescending = true;
+            }
+            else
+            {
+                // SearchEngine が返した順（FullPath昇順）のまま
+                isModifiedDescending = false;
+            }
+
+            if (isModifiedDescending)
+                MarkFiscalYearBoundaries(items);
+            else
+                ClearFiscalYearBoundaries(items);
+        }
+
+        /// <summary>
+        /// 列名に対応する比較ロジックを返す。二次キーは常に FullPath 昇順で決定的順序を維持する。
+        /// 文字列列は CollectionView の従来挙動に合わせカルチャ依存の String.Compare を用いる。
+        /// </summary>
+        private static Comparison<FileResultItem> GetComparison(string sortBy, bool ascending)
+        {
+            int sign = ascending ? 1 : -1;
+            switch (sortBy)
+            {
+                case "Size":
+                    return (a, b) =>
+                    {
+                        int c = a.Size.CompareTo(b.Size);
+                        if (c != 0) return sign * c;
+                        return CompareFullPath(a, b);
+                    };
+                case "Modified":
+                    return (a, b) =>
+                    {
+                        int c = a.Modified.CompareTo(b.Modified);
+                        if (c != 0) return sign * c;
+                        return CompareFullPath(a, b);
+                    };
+                case "Path":
+                    return (a, b) =>
+                    {
+                        int c = string.Compare(a.Path, b.Path);
+                        if (c != 0) return sign * c;
+                        return CompareFullPath(a, b);
+                    };
+                case "FullPath":
+                    return (a, b) => sign * string.Compare(a.FullPath, b.FullPath);
+                case "Name":
+                default:
+                    return (a, b) =>
+                    {
+                        int c = string.Compare(a.Name, b.Name);
+                        if (c != 0) return sign * c;
+                        return CompareFullPath(a, b);
+                    };
+            }
+        }
+
+        private static int CompareFullPath(FileResultItem a, FileResultItem b)
+        {
+            return string.Compare(a.FullPath, b.FullPath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ClearFiscalYearBoundaries(IReadOnlyList<FileResultItem> items)
+        {
+            for (int i = 0; i < items.Count; i++)
+            {
+                items[i].IsFiscalYearBoundary = false;
+                items[i].FiscalYearLabel = null;
+            }
         }
 
         private void MarkFiscalYearBoundaries(IReadOnlyList<FileResultItem> items)

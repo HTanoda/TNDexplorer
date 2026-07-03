@@ -22,7 +22,6 @@ namespace TNDexplorer.Views
     {
         private GridViewColumnHeader _lastHeaderClicked;
         private ListSortDirection _lastDirection = ListSortDirection.Ascending;
-        private string _lastSortBy;
         private PreviewHandlerHost _previewHost;
         private string _currentPreviewPath;
         private bool _isPdfPreview;
@@ -70,16 +69,6 @@ namespace TNDexplorer.Views
                 {
                     var sv = FindVisualChild<System.Windows.Controls.ScrollViewer>(ResultsListView);
                     sv?.ScrollToVerticalOffset(offset);
-                };
-
-                // 検索結果(ItemsSource)が差し替わるとCollectionViewのソートは失われるため、
-                // 結果更新のたびに現在のソートを再適用してユーザーの並び順を維持する。
-                vm.PropertyChanged += (s, ev) =>
-                {
-                    if (ev.PropertyName == nameof(MainViewModel.Results))
-                        Dispatcher.BeginInvoke(
-                            new Action(ApplyCurrentSort),
-                            System.Windows.Threading.DispatcherPriority.Background);
                 };
 
                 // Restore saved column order
@@ -964,28 +953,9 @@ namespace TNDexplorer.Views
 
             _lastHeaderClicked = headerClicked;
             _lastDirection = direction;
-            _lastSortBy = sortBy;
 
-            ApplyCurrentSort();
-        }
-
-        /// <summary>
-        /// 現在のソート条件を結果一覧へ適用する。検索結果(ItemsSource)が差し替わると
-        /// CollectionView のソートは失われるため、結果更新のたびに呼び出してユーザーの
-        /// 並び順を維持する。同値（同一更新日時など）は FullPath を二次キーにして安定化させる。
-        /// </summary>
-        private void ApplyCurrentSort()
-        {
-            if (string.IsNullOrEmpty(_lastSortBy)) return;
-
-            var dataView = CollectionViewSource.GetDefaultView(ResultsListView.ItemsSource);
-            if (dataView == null) return;
-
-            dataView.SortDescriptions.Clear();
-            dataView.SortDescriptions.Add(new SortDescription(_lastSortBy, _lastDirection));
-            if (!string.Equals(_lastSortBy, "FullPath", StringComparison.Ordinal))
-                dataView.SortDescriptions.Add(new SortDescription("FullPath", ListSortDirection.Ascending));
-            dataView.Refresh();
+            var vm = DataContext as MainViewModel;
+            vm?.SetSort(sortBy, direction == ListSortDirection.Ascending);
         }
 
         private static T FindVisualChild<T>(System.Windows.DependencyObject parent) where T : System.Windows.DependencyObject

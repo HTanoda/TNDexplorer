@@ -744,6 +744,10 @@ namespace TNDexplorer.ViewModels
         {
             string query = _searchText;
 
+            // 年度グループ化ONの新規検索（ライブ更新以外）は既定の更新日時降順に戻す
+            if (!preserveView && _groupByFiscalYear && _sortBy != null)
+                SortBy = null;
+
             if (string.IsNullOrWhiteSpace(query) && !HasAdvancedFilters())
             {
                 Results = new List<FileResultItem>();
@@ -1047,31 +1051,31 @@ namespace TNDexplorer.ViewModels
         ///   SortBy が非null → ユーザーソート。
         ///   SortBy が null かつ GroupByFiscalYear → Modified 降順（従来挙動）。
         ///   どちらでもなければ SearchEngine が返した順（FullPath昇順）のまま。
-        /// 最終的な並び順が「Modified 降順」の場合のみ年度境界をマークし、
+        /// 最終的な並び順が「Modified 順（昇順/降順）」の場合のみ年度境界をマークし、
         /// それ以外は境界情報をクリアする（表示の不整合を解消）。
         /// </summary>
         private void ApplyOrdering(List<FileResultItem> items)
         {
             if (items == null || items.Count == 0) return;
 
-            bool isModifiedDescending;
+            bool isModifiedOrder;
             if (!string.IsNullOrEmpty(_sortBy))
             {
                 items.Sort(GetComparison(_sortBy, _sortAscending));
-                isModifiedDescending = string.Equals(_sortBy, "Modified", StringComparison.Ordinal) && !_sortAscending;
+                isModifiedOrder = string.Equals(_sortBy, "Modified", StringComparison.Ordinal);
             }
             else if (_groupByFiscalYear)
             {
                 items.Sort(GetComparison("Modified", false));
-                isModifiedDescending = true;
+                isModifiedOrder = true;
             }
             else
             {
                 // SearchEngine が返した順（FullPath昇順）のまま
-                isModifiedDescending = false;
+                isModifiedOrder = false;
             }
 
-            if (isModifiedDescending)
+            if (isModifiedOrder)
                 MarkFiscalYearBoundaries(items);
             else
                 ClearFiscalYearBoundaries(items);

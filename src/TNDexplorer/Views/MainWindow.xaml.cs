@@ -71,6 +71,18 @@ namespace TNDexplorer.Views
                     sv?.ScrollToVerticalOffset(offset);
                 };
 
+                // ユーザーソートが解除された時（年度グループ化ONの新規検索など）は
+                // 列ヘッダの ▲/▼ 表示も消して実際の並び順と一致させる
+                vm.PropertyChanged += (s, ev) =>
+                {
+                    if (ev.PropertyName == nameof(MainViewModel.SortBy)
+                        && vm.SortBy == null && _lastHeaderClicked != null)
+                    {
+                        _lastHeaderClicked.Column.HeaderStringFormat = null;
+                        _lastHeaderClicked = null;
+                    }
+                };
+
                 // Restore saved column order
                 RestoreColumnOrder(vm);
             }

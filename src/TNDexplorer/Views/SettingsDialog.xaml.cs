@@ -153,18 +153,23 @@ namespace TNDexplorer.Views
         private void OnRescanSelectedClick(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;
-            var selected = CustomFoldersList.SelectedItem as CustomFolderItem;
-            if (selected == null)
+            if (vm == null) return;
+
+            var targets = vm.CustomFolders.Where(f => f.IsSelected).ToList();
+            if (targets.Count == 0)
             {
-                MessageBox.Show("更新するフォルダを選択してください。",
+                MessageBox.Show("更新するフォルダがありません。走査対象のフォルダにチェックを入れてください。",
                     "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            if (vm?.RescanCustomFolderAction != null)
+            if (vm.RescanCustomFolderAction != null)
             {
-                vm.RescanCustomFolderAction(selected.FolderPath);
-                MessageBox.Show($"{selected.FolderPath} の更新を開始しました。バックグラウンドで実行されます。",
+                foreach (var target in targets)
+                {
+                    vm.RescanCustomFolderAction(target.FolderPath);
+                }
+                MessageBox.Show($"{targets.Count} 件のフォルダの更新を開始しました。バックグラウンドで実行されます。",
                     "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
@@ -190,28 +195,21 @@ namespace TNDexplorer.Views
             }
         }
 
-        private void OnRemoveCustomFolder(object sender, RoutedEventArgs e)
+        private void OnRemoveFolderRow(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;
-            if (vm == null) return;
-
-            var selectedItems = CustomFoldersList.SelectedItems.Cast<CustomFolderItem>().ToList();
-            if (selectedItems.Count == 0)
-            {
-                MessageBox.Show("削除するフォルダを選択してください。", "フォルダ",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
+            var item = (sender as FrameworkElement)?.DataContext as CustomFolderItem;
+            if (vm == null || item == null) return;
 
             var result = MessageBox.Show(
-                $"選択した {selectedItems.Count} 件のフォルダを削除しますか？",
+                $"「{item.FolderPath}」を削除しますか？",
                 "フォルダの削除",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (result == MessageBoxResult.Yes)
             {
-                vm.RemoveCustomFolders(selectedItems);
+                vm.RemoveCustomFolders(new List<CustomFolderItem> { item });
             }
         }
     }

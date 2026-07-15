@@ -14,6 +14,25 @@
     <Window.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
         <converters:IntToBoolConverter x:Key="IntToBool"/>
+        <Style x:Key="FolderRowDeleteButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextSecondary}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="#FFDC3545"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="10">
@@ -78,28 +97,33 @@
                         <!-- Custom Folders -->
                         <TextBlock Text="フォルダ"
                                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <TextBlock Text="手動で走査対象のフォルダを追加できます。" FontSize="11"
-                                   Foreground="{DynamicResource App.TextSecondary}" Margin="0,0,0,5"/>
-                        <ListBox x:Name="CustomFoldersList"
-                                 ItemsSource="{Binding CustomFolders}" Margin="0,0,0,5"
-                                 MaxHeight="120" BorderThickness="1" BorderBrush="{DynamicResource App.Border}"
-                                 SelectionMode="Extended">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="2,1">
-                                        <TextBlock Text="{Binding FolderPath}" ToolTip="{Binding FolderPath}"/>
-                                    </CheckBox>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <TextBlock Text="手動で走査対象のフォルダを追加できます。チェックしたフォルダが走査対象になります（チェックを外しても登録は残ります）。" FontSize="11"
+                                   Foreground="{DynamicResource App.TextSecondary}" Margin="0,0,0,5" TextWrapping="Wrap"/>
+                        <Border BorderThickness="1" BorderBrush="{DynamicResource App.Border}" Margin="0,0,0,5">
+                            <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding CustomFolders}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel LastChildFill="True" Margin="2,1">
+                                                <Button DockPanel.Dock="Right" Content="✕" FontSize="11" Padding="6,0"
+                                                        Cursor="Hand" ToolTip="このフォルダを削除"
+                                                        Click="OnRemoveFolderRow"
+                                                        Style="{StaticResource FolderRowDeleteButton}"/>
+                                                <CheckBox IsChecked="{Binding IsSelected}"
+                                                          ToolTip="チェックを外すと走査対象から除外されます（登録は残ります）">
+                                                    <TextBlock Text="{Binding FolderPath}" ToolTip="{Binding FolderPath}"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </CheckBox>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
                             <Button Content="追加" Padding="12,4" FontSize="12"
                                     Click="OnAddCustomFolder"
                                     Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand"/>
-                            <Button Content="選択した項目を削除" Padding="12,4" FontSize="12"
-                                    Click="OnRemoveCustomFolder" Margin="8,0,0,0"
-                                    Background="#FFDC3545" Foreground="White" BorderThickness="0"
                                     Cursor="Hand"/>
                         </StackPanel>
 
@@ -177,7 +201,7 @@
                             <Button Content="すぐに更新" Padding="12,4" FontSize="12"
                                     Click="OnRescanSelectedClick"
                                     Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand" ToolTip="選択したフォルダのみ更新"/>
+                                    Cursor="Hand" ToolTip="チェックしたフォルダのみ更新"/>
                             <Button Content="すべて更新" Padding="12,4" FontSize="12"
                                     Click="OnManualRescanClick" Margin="8,0,0,0"
                                     Background="#FF0078D4" Foreground="White" BorderThickness="0"

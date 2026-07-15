@@ -150,26 +150,16 @@ namespace TNDexplorer.Views
             }
         }
 
-        private void OnRescanSelectedClick(object sender, RoutedEventArgs e)
+        private void OnRefreshFolderRow(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;
-            if (vm == null) return;
-
-            var targets = vm.CustomFolders.Where(f => f.IsSelected).ToList();
-            if (targets.Count == 0)
-            {
-                MessageBox.Show("更新するフォルダがありません。走査対象のフォルダにチェックを入れてください。",
-                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
+            var item = (sender as FrameworkElement)?.DataContext as CustomFolderItem;
+            if (vm == null || item == null || !item.IsSelected) return;
 
             if (vm.RescanCustomFolderAction != null)
             {
-                foreach (var target in targets)
-                {
-                    vm.RescanCustomFolderAction(target.FolderPath);
-                }
-                MessageBox.Show($"{targets.Count} 件のフォルダの更新を開始しました。バックグラウンドで実行されます。",
+                vm.RescanCustomFolderAction(item.FolderPath);
+                MessageBox.Show($"「{item.FolderPath}」の更新を開始しました。バックグラウンドで実行されます。",
                     "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else

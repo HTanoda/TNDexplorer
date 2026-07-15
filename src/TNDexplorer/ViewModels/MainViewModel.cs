@@ -896,7 +896,7 @@ namespace TNDexplorer.ViewModels
                     }
 
                     // Update final status with merged result count (content + filename matches)
-                    _dispatcher.BeginInvoke(new Action(() =>
+                    _ = _dispatcher.BeginInvoke(new Action(() =>
                     {
                         FullTextStatus = $"内容検索完了: {results.Count:N0} 件ヒット";
                     }));

@@ -33,6 +33,16 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="FolderRowRefreshButton" TargetType="Button" BasedOn="{StaticResource FolderRowDeleteButton}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="#FF0078D4"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource App.Border}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="10">
@@ -109,6 +119,13 @@
                                                         Cursor="Hand" ToolTip="このフォルダを削除"
                                                         Click="OnRemoveFolderRow"
                                                         Style="{StaticResource FolderRowDeleteButton}"/>
+                                                <Button DockPanel.Dock="Right" FontFamily="Segoe MDL2 Assets" Content="&#xE72C;"
+                                                        FontSize="11" Padding="6,0"
+                                                        Cursor="Hand" ToolTip="このフォルダをすぐに更新（チェックを外したフォルダは更新できません）"
+                                                        ToolTipService.ShowOnDisabled="True"
+                                                        Click="OnRefreshFolderRow"
+                                                        IsEnabled="{Binding IsSelected}"
+                                                        Style="{StaticResource FolderRowRefreshButton}"/>
                                                 <CheckBox IsChecked="{Binding IsSelected}"
                                                           ToolTip="チェックを外すと走査対象から除外されます（登録は残ります）">
                                                     <TextBlock Text="{Binding FolderPath}" ToolTip="{Binding FolderPath}"
@@ -198,12 +215,8 @@
 
                         <!-- Manual rescan buttons -->
                         <StackPanel Orientation="Horizontal" Margin="5,0,0,15">
-                            <Button Content="すぐに更新" Padding="12,4" FontSize="12"
-                                    Click="OnRescanSelectedClick"
-                                    Background="#FF0078D4" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand" ToolTip="チェックしたフォルダのみ更新"/>
                             <Button Content="すべて更新" Padding="12,4" FontSize="12"
-                                    Click="OnManualRescanClick" Margin="8,0,0,0"
+                                    Click="OnManualRescanClick"
                                     Background="#FF0078D4" Foreground="White" BorderThickness="0"
                                     Cursor="Hand" ToolTip="すべてのフォルダを更新"/>
                         </StackPanel>

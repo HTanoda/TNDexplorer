@@ -158,9 +158,14 @@ namespace TNDexplorer.Views
 
             if (vm.RescanCustomFolderAction != null)
             {
+                var result = MessageBox.Show(
+                    $"「{item.FolderPath}」を今すぐ更新しますか？\r\n更新はバックグラウンドで実行されます。",
+                    "リスキャン",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes) return;
+
                 vm.RescanCustomFolderAction(item.FolderPath);
-                MessageBox.Show($"「{item.FolderPath}」の更新を開始しました。バックグラウンドで実行されます。",
-                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {
@@ -174,9 +179,14 @@ namespace TNDexplorer.Views
             var vm = DataContext as SettingsViewModel;
             if (vm?.ManualRescanAction != null)
             {
+                var result = MessageBox.Show(
+                    "すべてのフォルダを今すぐ更新しますか？\r\n更新はバックグラウンドで実行されます。",
+                    "リスキャン",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes) return;
+
                 vm.ManualRescanAction();
-                MessageBox.Show("リスキャンを開始しました。バックグラウンドで実行されます。",
-                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {

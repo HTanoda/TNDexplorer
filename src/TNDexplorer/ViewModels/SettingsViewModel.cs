@@ -564,6 +564,45 @@ namespace TNDexplorer.ViewModels
 
         private void Save()
         {
+            var corrections = new System.Collections.Generic.List<string>();
+
+            void ClampInt(string label, int min, int max, Func<int> getter, Action<int> setter)
+            {
+                var value = getter();
+                var clamped = Math.Max(min, Math.Min(max, value));
+                if (clamped != value)
+                {
+                    setter(clamped);
+                    corrections.Add($"{label}: {clamped}");
+                }
+            }
+
+            void ClampLong(string label, long min, long max, Func<long> getter, Action<long> setter)
+            {
+                var value = getter();
+                var clamped = Math.Max(min, Math.Min(max, value));
+                if (clamped != value)
+                {
+                    setter(clamped);
+                    corrections.Add($"{label}: {clamped}");
+                }
+            }
+
+            ClampInt("検索結果の最大表示件数", 1, 1000000, () => MaxSearchResults, v => MaxSearchResults = v);
+            ClampInt("日次リスキャン時刻（時）", 0, 23, () => DailyRescanHour, v => DailyRescanHour = v);
+            ClampInt("日次リスキャン時刻（分）", 0, 59, () => DailyRescanMinute, v => DailyRescanMinute = v);
+            ClampInt("ネットワーク再スキャン間隔（分）", 180, 10080, () => NetworkRescanIntervalMinutes, v => NetworkRescanIntervalMinutes = v);
+            ClampLong("全文検索の最大対象ファイルサイズ（MB）", 1, 2048, () => FullTextMaxFileSizeMB, v => FullTextMaxFileSizeMB = v);
+
+            if (corrections.Count > 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "入力値が範囲外だったため修正しました:\n" + string.Join("\n", corrections),
+                    "設定値の修正",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+            }
+
             _settings.LocalDrives = LocalDrives.Select(d => new DriveSettings
             {
                 DriveLetter = d.DriveLetter,
@@ -621,11 +660,6 @@ namespace TNDexplorer.ViewModels
             _settings.RescanMode = (RescanMode)RescanModeIndex;
             _settings.DailyRescanHour = DailyRescanHour;
             _settings.DailyRescanMinute = DailyRescanMinute;
-            // Enforce minimum 180 minutes for Interval mode
-            if (_settings.RescanMode == RescanMode.Interval && _settings.NetworkRescanIntervalMinutes < 180)
-            {
-                _settings.NetworkRescanIntervalMinutes = 180;
-            }
             // リアルタイム監視は高度な設定が有効なときだけ保存（多人数環境のサーバ負荷に配慮）
             _settings.NetworkChangeMonitorEnabled = IsAdvancedEnabled && NetworkChangeMonitorEnabled;
 

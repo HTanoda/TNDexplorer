@@ -21,6 +21,11 @@ nul
 
 # Test/debug directories
 test_pdf_render/
+テスト/
+
+# Local working notes (not for distribution)
+/Plan.md
+/NetworkDrive.vbs
 
 # Claude Code
 .claude/

@@ -150,22 +150,22 @@ namespace TNDexplorer.Views
             }
         }
 
-        private void OnRescanSelectedClick(object sender, RoutedEventArgs e)
+        private void OnRefreshFolderRow(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;
-            var selected = CustomFoldersList.SelectedItem as CustomFolderItem;
-            if (selected == null)
-            {
-                MessageBox.Show("更新するフォルダを選択してください。",
-                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
+            var item = (sender as FrameworkElement)?.DataContext as CustomFolderItem;
+            if (vm == null || item == null || !item.IsSelected) return;
 
-            if (vm?.RescanCustomFolderAction != null)
+            if (vm.RescanCustomFolderAction != null)
             {
-                vm.RescanCustomFolderAction(selected.FolderPath);
-                MessageBox.Show($"{selected.FolderPath} の更新を開始しました。バックグラウンドで実行されます。",
-                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
+                var result = MessageBox.Show(
+                    $"「{item.FolderPath}」を今すぐ更新しますか？\r\n更新はバックグラウンドで実行されます。",
+                    "リスキャン",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes) return;
+
+                vm.RescanCustomFolderAction(item.FolderPath);
             }
             else
             {
@@ -179,9 +179,14 @@ namespace TNDexplorer.Views
             var vm = DataContext as SettingsViewModel;
             if (vm?.ManualRescanAction != null)
             {
+                var result = MessageBox.Show(
+                    "すべてのフォルダを今すぐ更新しますか？\r\n更新はバックグラウンドで実行されます。",
+                    "リスキャン",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes) return;
+
                 vm.ManualRescanAction();
-                MessageBox.Show("リスキャンを開始しました。バックグラウンドで実行されます。",
-                    "リスキャン", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {
@@ -190,28 +195,21 @@ namespace TNDexplorer.Views
             }
         }
 
-        private void OnRemoveCustomFolder(object sender, RoutedEventArgs e)
+        private void OnRemoveFolderRow(object sender, RoutedEventArgs e)
         {
             var vm = DataContext as SettingsViewModel;
-            if (vm == null) return;
-
-            var selectedItems = CustomFoldersList.SelectedItems.Cast<CustomFolderItem>().ToList();
-            if (selectedItems.Count == 0)
-            {
-                MessageBox.Show("削除するフォルダを選択してください。", "フォルダ",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
+            var item = (sender as FrameworkElement)?.DataContext as CustomFolderItem;
+            if (vm == null || item == null) return;
 
             var result = MessageBox.Show(
-                $"選択した {selectedItems.Count} 件のフォルダを削除しますか？",
+                $"「{item.FolderPath}」を削除しますか？",
                 "フォルダの削除",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (result == MessageBoxResult.Yes)
             {
-                vm.RemoveCustomFolders(selectedItems);
+                vm.RemoveCustomFolders(new List<CustomFolderItem> { item });
             }
         }
     }

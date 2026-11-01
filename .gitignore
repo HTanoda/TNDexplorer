@@ -23,6 +23,9 @@ nul
 test_pdf_render/
 テスト/
 
+# Release packaging output
+dist/
+
 # Local working notes (not for distribution)
 /Plan.md
 /NetworkDrive.vbs

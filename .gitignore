@@ -32,3 +32,8 @@ dist/
 
 # Claude Code
 .claude/
+
+# Internal working documents (kept locally, not published)
+/HANDOVER.md
+/docs/superpowers/
+/docs/*.md
